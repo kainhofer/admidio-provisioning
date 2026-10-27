@@ -288,6 +288,8 @@ class TargetService
             throw new Exception('SYS_NO_RIGHTS');
         }
 
+        // the worker writes the remote ID with plain SQL, so the object may not know it yet
+        $group->readDataById((int) $group->getValue('pvg_id'));
         if ((string) $group->getValue('pvg_remote_id', 'database') === '') {
             $group->delete();
             return;
