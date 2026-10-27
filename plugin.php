@@ -15,6 +15,7 @@
 
 use Admidio\Changelog\Service\ChangelogService;
 use Admidio\Hooks\Hooks;
+use Admidio\Infrastructure\Plugins\Plugin;
 use Admidio\Infrastructure\Plugins\PluginRegistry;
 use Admidio\Infrastructure\Utils\SecurityUtils;
 use AdmidioPlugin\Provisioning\Connector\Connectors;
@@ -25,6 +26,7 @@ use AdmidioPlugin\Provisioning\ProvisioningPlugin;
 use AdmidioPlugin\Provisioning\ProvisioningTables;
 use AdmidioPlugin\Provisioning\Service\ChangeCollector;
 use AdmidioPlugin\Provisioning\Service\RequestRunner;
+use AdmidioPlugin\Provisioning\Service\TargetService;
 
 if (realpath($_SERVER['SCRIPT_FILENAME'] ?? '') === __FILE__) {
     exit('This page may not be called directly!');
@@ -41,6 +43,18 @@ foreach (ChangeCollector::HOOKS as $hook) {
 }
 
 RequestRunner::register();
+
+// Core 6.0 additions, used where the core offers them (the actions and filters simply never fire
+// in a core without them): the daily report of memberships whose date was reached, and the warning
+// in the plugin manager before the plugin is removed.
+Hooks::addAction('membership_period_changed', array(ChangeCollector::class, 'onMembershipPeriodChanged'), 50, 2, 'provisioning-membership-period');
+Hooks::addFilter('plugin_removal_warnings', static function (array $warnings, Plugin $plugin): array {
+    global $gDb;
+
+    return $plugin->id === ProvisioningPlugin::ID
+        ? array_merge($warnings, (new TargetService($gDb))->removalWarnings())
+        : $warnings;
+}, 10, 2, 'provisioning-removal-warnings');
 
 // Only administrators can use the plugin, so only they see its menu entry.
 Hooks::addFilter('menu_item_visible', static function (bool $visible, int $menuId, string $componentName): bool {

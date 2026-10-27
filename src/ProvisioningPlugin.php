@@ -3,6 +3,7 @@ namespace AdmidioPlugin\Provisioning;
 
 use Admidio\Components\Entity\Component;
 use Admidio\Infrastructure\Plugins\PluginRegistry;
+use Admidio\Roles\Entity\Membership;
 
 /**
  * Identity, setting names and small shared helpers of the provisioning plugin.
@@ -44,13 +45,17 @@ final class ProvisioningPlugin
      * The SQL condition of a membership that is valid on the given day, with its parameters.
      *
      * A membership is valid from 00:00 of mem_begin up to, but not including, 00:00 of mem_end, the
-     * same rule as User::isMemberOfOrganization(). Core has no shared definition of it yet (proposal
-     * C4 of the concept); once Membership offers one, this method should delegate to it.
+     * same rule as User::isMemberOfOrganization(). Core versions that define it in
+     * Membership::getSqlValidCondition() are asked; older ones get the same condition from here.
      *
      * @return array{sql: string, params: array<int,string>}
      */
     public static function validMembershipCondition(?string $date = null, string $tableAlias = ''): array
     {
+        if (method_exists(Membership::class, 'getSqlValidCondition')) {
+            return Membership::getSqlValidCondition($date, $tableAlias);
+        }
+
         $date ??= DATE_NOW;
         $prefix = $tableAlias === '' ? '' : $tableAlias . '.';
 

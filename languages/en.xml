@@ -77,6 +77,7 @@
   <string name="PLG_PROVISIONING_OAUTH_SCOPE">OAuth scope</string>
   <string name="PLG_PROVISIONING_OAUTH_TOKEN_URL">OAuth token URL</string>
   <string name="PLG_PROVISIONING_QUEUE">Queue</string>
+  <string name="PLG_PROVISIONING_REMOVAL_WARNING">The target &quot;#VAR1#&quot; (#VAR2#) still has #VAR3# accounts and #VAR4# groups on its system. After the removal they are no longer managed; deprovision the target first to delete them.</string>
   <string name="PLG_PROVISIONING_REQUEST_BUDGET">Seconds per request for synchronization</string>
   <string name="PLG_PROVISIONING_REQUEST_BUDGET_DESC">After a change, the target systems are updated after the page has been delivered, for at most this many seconds. 0 leaves the synchronization to cron.</string>
   <string name="PLG_PROVISIONING_RETRY">Try again</string>

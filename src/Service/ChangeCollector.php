@@ -51,6 +51,29 @@ final class ChangeCollector
     }
 
     /**
+     * A membership started or ended by its date (core action membership_period_changed). The daily
+     * reconciliation would find it as well; reacting at once updates the targets right after
+     * midnight instead of with the next run.
+     *
+     * @param array<string,mixed> $membership
+     */
+    public static function onMembershipPeriodChanged(array $membership, string $change = ''): void
+    {
+        global $gLogger;
+
+        try {
+            $targets = self::targets();
+            if ($targets !== array() && self::planUsers($targets, array((int) ($membership['mem_usr_id'] ?? 0)))) {
+                RequestRunner::markQueued();
+            }
+        } catch (Throwable $exception) {
+            if (isset($gLogger)) {
+                $gLogger->warning('Provisioning: a membership period change could not be queued.', array('message' => $exception->getMessage()));
+            }
+        }
+    }
+
+    /**
      * @return bool Whether something was queued.
      */
     public static function collect(EntityChangeSet $changeSet): bool

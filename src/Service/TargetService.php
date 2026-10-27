@@ -300,6 +300,34 @@ class TargetService
     }
 
     /**
+     * What removing the plugin leaves behind: the targets of every organization that still have
+     * accounts or groups on their systems. Answers the core filter plugin_removal_warnings.
+     *
+     * @return array<int,string>
+     */
+    public function removalWarnings(): array
+    {
+        global $gL10n;
+
+        $warnings = array();
+        foreach ($this->db->getArrayFromSql(
+            'SELECT pvt_name, org_shortname,
+                    (SELECT COUNT(*) FROM ' . ProvisioningTables::accounts() . ' WHERE pva_pvt_id = pvt_id AND pva_remote_id IS NOT NULL) AS accounts,
+                    (SELECT COUNT(*) FROM ' . ProvisioningTables::groups() . ' WHERE pvg_pvt_id = pvt_id AND pvg_remote_id IS NOT NULL) AS groups_count
+               FROM ' . ProvisioningTables::targets() . '
+              INNER JOIN ' . TBL_ORGANIZATIONS . ' ON org_id = pvt_org_id
+              ORDER BY org_shortname, pvt_name'
+        ) as $row) {
+            if ((int) $row['accounts'] + (int) $row['groups_count'] > 0) {
+                $warnings[] = $gL10n->get('PLG_PROVISIONING_REMOVAL_WARNING', array(
+                    (string) $row['pvt_name'], (string) $row['org_shortname'], (string) $row['accounts'], (string) $row['groups_count']
+                ));
+            }
+        }
+        return $warnings;
+    }
+
+    /**
      * The sources an attribute or the account name may come from.
      *
      * @return array<int,string>

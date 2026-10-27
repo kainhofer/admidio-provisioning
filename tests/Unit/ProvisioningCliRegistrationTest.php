@@ -62,4 +62,12 @@ final class ProvisioningCliRegistrationTest extends AdmidioTestCase
         $this->assertTrue(CliTaskRegistry::get('provisioning:sync')['supportsDryRun']);
         $this->assertFalse(CliTaskRegistry::get('provisioning:queue')['supportsDryRun']);
     }
+
+    public function testTheSynchronizationIsAMaintenanceJobWhereCoreOffersThem(): void
+    {
+        if (!method_exists(CliTaskRegistry::class, 'getMaintenanceJobs')) {
+            $this->markTestSkipped('This Admidio version has no maintenance job registry.');
+        }
+        $this->assertArrayHasKey('provisioning:sync', CliTaskRegistry::getMaintenanceJobs());
+    }
 }

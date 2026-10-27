@@ -23,15 +23,27 @@ or clean up the targets first.
 
 Changes in Admidio reach the targets within seconds, at the end of the request that made them.
 Membership start and end dates, which Admidio only knows as whole days, take effect with the daily
-reconciliation shortly after midnight. Run the plugin hourly, one line per organization:
+reconciliation shortly after midnight. Run the maintenance jobs of Admidio hourly, one line per
+organization; the plugin registers its job `provisioning:sync` there:
 
 ```
-15 * * * *  php /path/to/admidio/admidio provisioning:sync --organization=SHORTNAME --no-interaction --quiet
+15 * * * *  php /path/to/admidio/admidio maintenance:run --organization=SHORTNAME --no-interaction --quiet
 ```
+
+On an Admidio version without maintenance job registration, run `provisioning:sync` instead of
+`maintenance:run`.
 
 The command needs an acting organization administrator, for example through `$gCliDefaults` in
 `adm_my_files/cli-config.php`. Without cron the first page request after midnight starts the
 reconciliation; ended memberships then stay active on the target until somebody opens Admidio.
+
+### Using what Admidio core offers
+
+Where the Admidio core provides them, the plugin uses the maintenance job registry (one cron entry), the
+action `request_finished` (work after the response was sent), the action `membership_period_changed`
+(targets are updated right after a membership starts or ends by its date), the shared definition of
+a valid membership, and the removal warnings of the plugin manager. On a core without them it uses its
+own fallbacks.
 
 ## Configuration
 

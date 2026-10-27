@@ -445,4 +445,26 @@ final class ProvisioningTest extends ProvisioningDatabaseTestCase
         $this->assertNotNull(MemoryConnector::accountByKey($user['usr_uuid']));
         $this->assertSame(array(), MemoryConnector::$groups);
     }
+
+    public function testTheRemovalWarningNamesTargetsWithRemoteData(): void
+    {
+        [$role] = $this->member('warning');
+        $target = $this->createTarget(array($role['rol_id']));
+        $service = new TargetService($this->getDatabase());
+        $this->assertSame(array(), array_filter($service->removalWarnings(), static fn(string $w): bool => str_contains($w, $target->readableName())));
+
+        $this->sync($target);
+
+        $this->assertNotSame(array(), array_filter($service->removalWarnings(), static fn(string $w): bool => str_contains($w, $target->readableName())));
+    }
+
+    public function testAMembershipPeriodChangeQueuesTheUser(): void
+    {
+        [$role, $user] = $this->member('period');
+        $target = $this->createTarget(array($role['rol_id']));
+
+        ChangeCollector::onMembershipPeriodChanged(array('mem_usr_id' => $user['usr_id']), 'started');
+
+        $this->assertSame(1, (new Queue($this->getDatabase()))->counts($target->getId())[Queue::STATE_PENDING]);
+    }
 }

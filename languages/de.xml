@@ -77,6 +77,7 @@
   <string name="PLG_PROVISIONING_OAUTH_SCOPE">OAuth-Scope</string>
   <string name="PLG_PROVISIONING_OAUTH_TOKEN_URL">OAuth-Token-URL</string>
   <string name="PLG_PROVISIONING_QUEUE">Warteschlange</string>
+  <string name="PLG_PROVISIONING_REMOVAL_WARNING">Das Ziel „#VAR1#“ (#VAR2#) hat auf seinem System noch #VAR3# Konten und #VAR4# Gruppen. Nach dem Entfernen werden sie nicht mehr verwaltet; deprovisioniere das Ziel vorher, um sie zu löschen.</string>
   <string name="PLG_PROVISIONING_REQUEST_BUDGET">Sekunden pro Seitenaufruf für die Synchronisierung</string>
   <string name="PLG_PROVISIONING_REQUEST_BUDGET_DESC">Nach einer Änderung werden die Zielsysteme nach der Auslieferung der Seite aktualisiert, höchstens so viele Sekunden lang. Bei 0 übernimmt Cron die Synchronisierung.</string>
   <string name="PLG_PROVISIONING_RETRY">Erneut versuchen</string>

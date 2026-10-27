@@ -57,6 +57,28 @@ final class ProvisioningCli
         return $failed ? CliApplication::EXIT_FAILED : CliApplication::EXIT_SUCCESS;
     }
 
+    /**
+     * The maintenance job: the same as provisioning:sync without options.
+     */
+    public static function maintenanceJob(): string
+    {
+        global $gDb;
+
+        RequestRunner::skip();
+        $processed = 0;
+        $failed = array();
+        foreach ((new Scheduler($gDb))->run(array('cli' => true)) as $result) {
+            $processed += (int) $result['processed'];
+            if ($result['state'] !== TargetStatus::STATE_OK && $result['state'] !== TargetStatus::STATE_DEPROVISIONING) {
+                $failed[] = $result['target'] . ': ' . $result['state'];
+            }
+        }
+        if ($failed !== array()) {
+            throw new \RuntimeException(implode('; ', $failed));
+        }
+        return $processed . ' items processed';
+    }
+
     public static function status(array $arguments, array $options): int
     {
         global $gDb, $gCurrentOrgId;

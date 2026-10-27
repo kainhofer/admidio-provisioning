@@ -104,3 +104,15 @@ CliTaskRegistry::register(
     array(),
     array($target)
 );
+
+/*
+ * With a core that runs registered maintenance jobs, the one crontab entry of maintenance:run covers
+ * provisioning as well. provisioning:sync stays for running the plugin on its own.
+ */
+if (method_exists(CliTaskRegistry::class, 'registerMaintenanceJob')) {
+    CliTaskRegistry::registerMaintenanceJob(
+        'provisioning:sync',
+        array(ProvisioningCli::class, 'maintenanceJob'),
+        'Run what is due for the provisioning targets: daily reconciliation, verification and queue.'
+    );
+}
