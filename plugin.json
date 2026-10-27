@@ -1,0 +1,43 @@
+{
+    "name": "PLG_PROVISIONING_NAME",
+    "description": "PLG_PROVISIONING_DESCRIPTION",
+    "version": "0.1.0",
+    "author": "Reinhold Kainhofer",
+    "url": "https://github.com/kainhofer/admidio-provisioning/",
+    "icon": "bi-diagram-3",
+    "requires": {
+        "admidio": ">=6.0",
+        "php": ">=8.2",
+        "extensions": ["curl"]
+    },
+    "autoload": {
+        "AdmidioPlugin\\Provisioning\\": "src/"
+    },
+    "preferences": {
+        "section": "login_security",
+        "sequence": 50
+    },
+    "settings": {
+        "provisioning_request_budget": {
+            "type": "integer",
+            "default": 5,
+            "min": 0,
+            "max": 30,
+            "step": 1,
+            "label": "PLG_PROVISIONING_REQUEST_BUDGET",
+            "description": "PLG_PROVISIONING_REQUEST_BUDGET_DESC"
+        },
+        "provisioning_allow_private_network": {
+            "type": "boolean",
+            "default": false,
+            "label": "PLG_PROVISIONING_ALLOW_PRIVATE_NETWORK",
+            "description": "PLG_PROVISIONING_ALLOW_PRIVATE_NETWORK_DESC"
+        },
+        "provisioning_notify_admins": {
+            "type": "boolean",
+            "default": true,
+            "label": "PLG_PROVISIONING_NOTIFY_ADMINS",
+            "description": "PLG_PROVISIONING_NOTIFY_ADMINS_DESC"
+        }
+    }
+}
