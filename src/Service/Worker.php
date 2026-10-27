@@ -310,8 +310,14 @@ class Worker
         $remoteId = (string) $group['pvg_remote_id'];
 
         if ($group['pvg_state'] === Group::STATE_DELETE) {
-            if ($remoteId !== '') {
+            if ($remoteId !== '' && ($this->connector->getCapabilities()['deleteGroups'] ?? true)) {
                 $this->connector->deleteGroup($remoteId);
+            } elseif ($remoteId !== '') {
+                // the group stays on the target; only what Admidio added to it is taken back
+                $stored = array_values(array_filter($this->storedMembers((int) $group['pvg_id']), static fn(string $key): bool => $key !== ''));
+                if ($stored !== array()) {
+                    $this->connector->changeMembers($remoteId, new GroupState($groupUuid, (string) $group['pvg_name']), array(), $stored);
+                }
             }
             $this->db->queryPrepared('DELETE FROM ' . ProvisioningTables::groups() . ' WHERE pvg_id = ?', array((int) $group['pvg_id']));
             return true;

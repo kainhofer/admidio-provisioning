@@ -65,6 +65,15 @@ abstract class Connector
     }
 
     /**
+     * The Admidio field that gives the account name when neither the target nor a linked SSO client
+     * names one: the login name, or for example the email address for a mailing list.
+     */
+    public static function getDefaultAccountNameSource(): string
+    {
+        return 'usr_login_name';
+    }
+
+    /**
      * The mapping a new target starts with, as path => Admidio field (internal name of a profile
      * field, or usr_login_name, usr_uuid, fullname).
      *
@@ -78,10 +87,12 @@ abstract class Connector
     /**
      * What the target supports. **accounts**: it has accounts of its own (a mailing list has only
      * members). **deactivate**: accounts can be deactivated; otherwise an account that no longer
-     * belongs to the target is deleted. **groups**: it has groups. **memberKey**: how group
-     * members are identified. **verify**: verifyAccount() and readGroupMembers() can be asked.
+     * belongs to the target is deleted. **groups**: it has groups. **deleteGroups**: a group that
+     * is no longer configured is deleted; otherwise only the members Admidio added are removed
+     * from it (for example from a mailing list with an archive). **memberKey**: how group members
+     * are identified. **verify**: verifyAccount() and readGroupMembers() can be asked.
      *
-     * @return array{accounts: bool, deactivate: bool, groups: bool, memberKey: string, verify: bool}
+     * @return array{accounts: bool, deactivate: bool, groups: bool, deleteGroups: bool, memberKey: string, verify: bool}
      */
     public function getCapabilities(): array
     {
@@ -89,6 +100,7 @@ abstract class Connector
             'accounts' => true,
             'deactivate' => true,
             'groups' => true,
+            'deleteGroups' => true,
             'memberKey' => self::MEMBER_KEY_REMOTE_ID,
             'verify' => false
         );

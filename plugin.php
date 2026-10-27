@@ -19,6 +19,8 @@ use Admidio\Infrastructure\Plugins\Plugin;
 use Admidio\Infrastructure\Plugins\PluginRegistry;
 use Admidio\Infrastructure\Utils\SecurityUtils;
 use AdmidioPlugin\Provisioning\Connector\Connectors;
+use AdmidioPlugin\Provisioning\Connector\Mailman\MailmanConnector;
+use AdmidioPlugin\Provisioning\Connector\Nextcloud\NextcloudConnector;
 use AdmidioPlugin\Provisioning\Connector\Scim\ScimConnector;
 use AdmidioPlugin\Provisioning\Entity\Group;
 use AdmidioPlugin\Provisioning\Entity\Target;
@@ -35,8 +37,10 @@ if (realpath($_SERVER['SCRIPT_FILENAME'] ?? '') === __FILE__) {
 // The plugin's own connectors are registered like those of any other plugin.
 Hooks::addFilter(Connectors::HOOK, static function (array $connectors): array {
     $connectors['scim'] = ScimConnector::class;
+    $connectors['nextcloud'] = NextcloudConnector::class;
+    $connectors['mailman'] = MailmanConnector::class;
     return $connectors;
-}, 10, 1, 'provisioning-scim');
+}, 10, 1, 'provisioning-connectors');
 
 foreach (ChangeCollector::HOOKS as $hook) {
     Hooks::addAction($hook, array(ChangeCollector::class, 'onEntityChange'), 50, 2, 'provisioning-' . $hook);

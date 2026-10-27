@@ -1,9 +1,15 @@
 # Admidio Provisioning Plugin — keep accounts and groups of other systems in line with Admidio
 
 A third-party plugin for Admidio 6.0 and later. It creates, updates, deactivates and deletes user
-accounts and groups on external systems according to Admidio's members and roles. The first connector
-speaks **SCIM 2.0**, the standard protocol for user provisioning; the connector model is open for
-others (Mailman 3, the Nextcloud provisioning API, Microsoft Graph).
+accounts and groups on external systems according to Admidio's members and roles. It comes with three
+connectors:
+
+* **SCIM 2.0**, the standard protocol for user provisioning;
+* **Nextcloud**, through its OCS provisioning API: users, their profile data, enabled state and groups;
+* **Mailman 3**, through its REST API: groups are mailing lists, their members are subscribed by email
+  address.
+
+Further connectors (for example Microsoft Graph) can be added by other plugins.
 
 ## Installation
 
@@ -60,6 +66,18 @@ target has
 
 The status page of a target shows its queue, the last runs and every account or group that needs
 attention, and offers *Synchronize now*, *Verify now*, *Test connection* and *Retry*.
+
+### Connector notes
+
+* **Nextcloud**: the account name is the Nextcloud user ID and cannot change after the account was
+  created. An existing user with that ID is taken over. New users get no password; Nextcloud mails
+  them a link to set one, so they need an email address. Authenticate with an app password of an
+  administrator.
+* **Mailman 3**: the account name defaults to the email address, so users without one are not
+  subscribed. A group name is the address of the list, or its local part together with the mail
+  domain of the target. Lists are created and deleted only if the target allows it; otherwise a
+  removed group only loses the subscriptions Admidio made. A changed email address moves the
+  subscription.
 
 For SCIM services that deviate from the standard, a target can send complete resources (PUT instead
 of PATCH), work without groups, delete accounts instead of deactivating them, and send the OAuth client

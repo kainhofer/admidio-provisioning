@@ -1,21 +1,13 @@
 <?php
 namespace AdmidioPlugin\Provisioning\Connector\Scim;
 
-use Admidio\Infrastructure\Utils\SecurityUtils;
 use AdmidioPlugin\Provisioning\Connector\ConnectorError;
-use Throwable;
+use AdmidioPlugin\Provisioning\Connector\HttpClient;
 
 /**
- * HTTP access to a SCIM service: URL building, authentication, the cURL transport and the
- * classification of failed responses.
- *
- * Every request goes through SecurityUtils::getOutboundRequestCurlOptions(), which validates the URL
- * and pins cURL to the checked address. Redirects are never followed, so credentials cannot be sent
- * to another host.
- *
- * For tests the transport can be replaced by a callable
- * `fn(string $method, string $url, array $headers, ?string $body): array{0:int, 1:array, 2:string}`
- * that returns status, response headers (lower-case names) and body.
+ * HTTP access to a SCIM service: URL building, authentication and the classification of failed
+ * responses. The requests themselves go through HttpClient, which validates every URL; for tests
+ * its transport can be replaced by a callable.
  */
 class ScimClient
 {
@@ -28,12 +20,9 @@ class ScimClient
     /** OAuth client authentication: client ID and secret as HTTP Basic credentials. */
     public const OAUTH_CLIENT_SECRET_BASIC = 'client_secret_basic';
 
-    private const MAX_RESPONSE_BYTES = 1048576;
-
     private string $baseUrl;
 
-    /** @var callable|null */
-    private $transport;
+    private HttpClient $http;
 
     private ?string $accessToken = null;
 
@@ -48,7 +37,7 @@ class ScimClient
         ?callable $transport = null
     ) {
         $this->baseUrl = rtrim((string) ($config['base_url'] ?? ''), '/');
-        $this->transport = $transport;
+        $this->http = new HttpClient($allowPrivateNetwork, $transport);
     }
 
     /**
@@ -84,7 +73,7 @@ class ScimClient
         $decoded = is_array($decoded) ? $decoded : null;
 
         if ($status === 429) {
-            throw ConnectorError::retry('HTTP 429: the target asks to slow down.', self::retryAfter($headers));
+            throw ConnectorError::retry('HTTP 429: the target asks to slow down.', HttpClient::retryAfter($headers));
         }
         if ($status >= 500) {
             throw ConnectorError::retry('HTTP ' . $status . self::detail($decoded));
@@ -133,22 +122,6 @@ class ScimClient
             return '';
         }
         return ': ' . mb_substr(implode(' - ', $parts), 0, 300);
-    }
-
-    /**
-     * @param array<string,string> $headers
-     */
-    private static function retryAfter(array $headers): int
-    {
-        $value = trim((string) ($headers['retry-after'] ?? ''));
-        if ($value === '') {
-            return 0;
-        }
-        if (ctype_digit($value)) {
-            return (int) $value;
-        }
-        $time = strtotime($value);
-        return $time === false ? 0 : max(0, $time - time());
     }
 
     private function authorizationHeader(): string
@@ -219,74 +192,6 @@ class ScimClient
             $headers[] = 'Authorization: ' . $authorization;
         }
 
-        if ($this->transport !== null) {
-            return ($this->transport)($method, $url, $headers, $body);
-        }
-        return $this->curl($method, $url, $headers, $body);
-    }
-
-    /**
-     * @param array<int,string> $headers
-     * @return array{0:int, 1:array<string,string>, 2:string}
-     */
-    private function curl(string $method, string $url, array $headers, ?string $body): array
-    {
-        try {
-            $pinning = SecurityUtils::getOutboundRequestCurlOptions($url, $this->allowPrivateNetwork);
-        } catch (Throwable) {
-            throw ConnectorError::target('The URL ' . $url . ' is not allowed. HTTPS is required, and private networks only if the plugin settings allow them.');
-        }
-
-        $curl = curl_init($url);
-        if ($curl === false) {
-            throw ConnectorError::retry('The HTTP request could not be initialized.');
-        }
-
-        $responseBody = '';
-        $tooLarge = false;
-        $responseHeaders = array();
-        $isCli = PHP_SAPI === 'cli';
-
-        curl_setopt_array($curl, $pinning + array(
-            CURLOPT_CUSTOMREQUEST => $method,
-            CURLOPT_HTTPHEADER => $headers,
-            CURLOPT_CONNECTTIMEOUT => 3,
-            CURLOPT_TIMEOUT => $isCli ? 15 : 5,
-            CURLOPT_FOLLOWLOCATION => false,
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_SSL_VERIFYHOST => 2,
-            CURLOPT_HEADERFUNCTION => static function ($handle, string $line) use (&$responseHeaders): int {
-                $parts = explode(':', $line, 2);
-                if (count($parts) === 2) {
-                    $responseHeaders[strtolower(trim($parts[0]))] = trim($parts[1]);
-                }
-                return strlen($line);
-            },
-            CURLOPT_WRITEFUNCTION => static function ($handle, string $chunk) use (&$responseBody, &$tooLarge): int {
-                if (strlen($responseBody) + strlen($chunk) > self::MAX_RESPONSE_BYTES) {
-                    $tooLarge = true;
-                    return 0;
-                }
-                $responseBody .= $chunk;
-                return strlen($chunk);
-            }
-        ));
-        if ($body !== null) {
-            curl_setopt($curl, CURLOPT_POSTFIELDS, $body);
-        }
-
-        $result = curl_exec($curl);
-        $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
-        $error = curl_error($curl);
-        curl_close($curl);
-
-        if ($tooLarge) {
-            throw ConnectorError::invalid('The response of the target is larger than 1 MB.');
-        }
-        if ($result === false || $status === 0) {
-            throw ConnectorError::retry('The target could not be reached' . ($error === '' ? '.' : ': ' . $error));
-        }
-
-        return array($status, $responseHeaders, $responseBody);
+        return $this->http->send($method, $url, $headers, $body);
     }
 }

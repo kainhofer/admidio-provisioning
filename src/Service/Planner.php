@@ -46,6 +46,7 @@ class Planner
     private ?array $fieldDefinitions = null;
     private int $skippedUsers = 0;
     private ?bool $groupsSupported = null;
+    private ?string $accountNameSource = null;
 
     public function __construct(private readonly Database $db, private readonly Target $target)
     {
@@ -501,9 +502,14 @@ class Planner
 
     /**
      * The Admidio field that gives the account name: the target's choice, otherwise the user
-     * identifier of the linked SSO client, otherwise the login name.
+     * identifier of the linked SSO client, otherwise the default of the connector.
      */
     public function accountNameSource(): string
+    {
+        return $this->accountNameSource ??= $this->resolveAccountNameSource();
+    }
+
+    private function resolveAccountNameSource(): string
     {
         $source = (string) $this->target->getValue('pvt_account_name_source', 'database');
         if ($source !== '') {
@@ -513,7 +519,11 @@ class Planner
         if ($client !== null && $client->getUserIdField() !== '') {
             return $client->getUserIdField();
         }
-        return 'usr_login_name';
+        try {
+            return Connectors::getClass((string) $this->target->getValue('pvt_connector', 'database'))::getDefaultAccountNameSource();
+        } catch (\InvalidArgumentException) {
+            return 'usr_login_name';
+        }
     }
 
     private function value(int $userId, string $source): string

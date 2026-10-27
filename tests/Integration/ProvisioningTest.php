@@ -446,6 +446,49 @@ final class ProvisioningTest extends ProvisioningDatabaseTestCase
         $this->assertSame(array(), MemoryConnector::$groups);
     }
 
+    private function setEmail(int $userId, string $email): void
+    {
+        $fieldId = (int) $this->getDatabase()->queryPrepared(
+            'SELECT usf_id FROM ' . TBL_USER_FIELDS . ' WHERE usf_name_intern = ?',
+            array('EMAIL')
+        )->fetchColumn();
+        $this->getDatabase()->queryPrepared('DELETE FROM ' . TBL_USER_DATA . ' WHERE usd_usr_id = ? AND usd_usf_id = ?', array($userId, $fieldId));
+        $this->getDatabase()->queryPrepared(
+            'INSERT INTO ' . TBL_USER_DATA . ' (usd_usr_id, usd_usf_id, usd_value) VALUES (?, ?, ?)',
+            array($userId, $fieldId, $email)
+        );
+    }
+
+    public function testAMailingListTargetSubscribesByEmailAndKeepsItsLists(): void
+    {
+        MemoryConnector::$capabilities = array('accounts' => false, 'memberKey' => 'email', 'deleteGroups' => false);
+        [$role, $user] = $this->member('list');
+        [, $noEmail] = $this->member('list-noemail', DATE_NOW, DATE_MAX, $role);
+        $this->setEmail($user['usr_id'], 'old@example.org');
+        $target = $this->createTarget(array($role['rol_id']));
+        $target->setValue('pvt_account_name_source', 'EMAIL');
+        $target->save();
+        $group = $this->createGroup($target, 'board', array($role['rol_id']));
+
+        $this->sync($target);
+        $this->assertSame(array('old@example.org'), array_keys(MemoryConnector::groupByName('board')['members']));
+        $this->assertSame(array(), MemoryConnector::$accounts, 'A mailing list has no accounts.');
+        $this->assertSame(1, (int) (new TargetStatus($this->getDatabase()))->get($target->getId())['pvs_skipped_users'], 'Without address no subscription.');
+
+        // a new address moves the subscription
+        $this->setEmail($user['usr_id'], 'new@example.org');
+        $this->sync($target);
+        $this->assertSame(array('new@example.org'), array_keys(MemoryConnector::groupByName('board')['members']));
+
+        // a removed group keeps its list; only the subscriptions Admidio made go
+        (new TargetService($this->getDatabase()))->deleteGroup($target, $group);
+        $this->sync($target);
+        $this->assertNotNull(MemoryConnector::groupByName('board'));
+        $this->assertSame(array(), MemoryConnector::groupByName('board')['members']);
+        $this->assertSame(array(), array_filter(MemoryConnector::$calls, static fn(string $c): bool => str_starts_with($c, 'deleteGroup')));
+        unset($noEmail);
+    }
+
     public function testTheRemovalWarningNamesTargetsWithRemoteData(): void
     {
         [$role] = $this->member('warning');
