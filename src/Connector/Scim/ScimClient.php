@@ -23,6 +23,11 @@ class ScimClient
     public const AUTH_OAUTH = 'oauth';
     public const AUTH_BASIC = 'basic';
 
+    /** OAuth client authentication: client ID and secret in the form body (RFC 6749 2.3.1). */
+    public const OAUTH_CLIENT_SECRET_POST = 'client_secret_post';
+    /** OAuth client authentication: client ID and secret as HTTP Basic credentials. */
+    public const OAUTH_CLIENT_SECRET_BASIC = 'client_secret_basic';
+
     private const MAX_RESPONSE_BYTES = 1048576;
 
     private string $baseUrl;
@@ -172,16 +177,22 @@ class ScimClient
             throw ConnectorError::target('No OAuth token URL is configured.');
         }
 
-        $form = array(
-            'grant_type' => 'client_credentials',
-            'client_id' => (string) ($this->config['oauth_client_id'] ?? ''),
-            'client_secret' => (string) ($this->secrets['oauth_client_secret'] ?? '')
-        );
+        $clientId = (string) ($this->config['oauth_client_id'] ?? '');
+        $clientSecret = (string) ($this->secrets['oauth_client_secret'] ?? '');
+        $form = array('grant_type' => 'client_credentials');
+        $authorization = '';
+        if (($this->config['oauth_auth_method'] ?? '') === self::OAUTH_CLIENT_SECRET_BASIC) {
+            // RFC 6749 2.3.1: both parts are form-encoded before they are joined
+            $authorization = 'Basic ' . base64_encode(urlencode($clientId) . ':' . urlencode($clientSecret));
+        } else {
+            $form['client_id'] = $clientId;
+            $form['client_secret'] = $clientSecret;
+        }
         if ((string) ($this->config['oauth_scope'] ?? '') !== '') {
             $form['scope'] = (string) $this->config['oauth_scope'];
         }
 
-        [$status, , $body] = $this->send('POST', $tokenUrl, http_build_query($form), '', 'application/x-www-form-urlencoded');
+        [$status, , $body] = $this->send('POST', $tokenUrl, http_build_query($form), $authorization, 'application/x-www-form-urlencoded');
         $decoded = json_decode($body, true);
 
         if ($status >= 500 || $status === 429) {

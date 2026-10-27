@@ -27,6 +27,11 @@
   <string name="PLG_PROVISIONING_CUSTOM_ATTRIBUTE">Zusätzliches Attribut #VAR1#</string>
   <string name="PLG_PROVISIONING_CUSTOM_ATTRIBUTE_DESC">Weitere Attribute des Zielsystems, z. B. urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:costCenter.</string>
   <string name="PLG_PROVISIONING_CUSTOM_ATTRIBUTE_SOURCE">Feld für zusätzliches Attribut #VAR1#</string>
+  <string name="PLG_PROVISIONING_DEPROVISION">Deprovisionieren</string>
+  <string name="PLG_PROVISIONING_DEPROVISION_CONFIRM">Ziel „#VAR1#“ deprovisionieren? Alle Gruppen und Konten, die Admidio auf dem Zielsystem angelegt hat, werden dort gelöscht, danach wird das Ziel in Admidio entfernt. Das kann nicht rückgängig gemacht werden.</string>
+  <string name="PLG_PROVISIONING_DEPROVISION_STARTED">Die Deprovisionierung hat begonnen. Das Ziel wird entfernt, sobald seine Gruppen und Konten gelöscht sind.</string>
+  <string name="PLG_PROVISIONING_DEPROVISIONED">Das Ziel wurde deprovisioniert und entfernt.</string>
+  <string name="PLG_PROVISIONING_DEPROVISIONING_LOCKED">Das Ziel wird deprovisioniert und kann nicht mehr geändert werden.</string>
   <string name="PLG_PROVISIONING_DESCRIPTION">Überträgt Admidio-Benutzer und -Rollen als Konten und Gruppen an externe Systeme, z. B. über SCIM 2.0.</string>
   <string name="PLG_PROVISIONING_DISCONNECT_CONFIRM">Ziel „#VAR1#“ trennen? Die Konfiguration wird in Admidio gelöscht. Die Konten und Gruppen auf dem Zielsystem bleiben unverändert.</string>
   <string name="PLG_PROVISIONING_ENABLED_DESC">Nur aktivierte Ziele werden synchronisiert.</string>
@@ -64,8 +69,11 @@
   <string name="PLG_PROVISIONING_NO_TARGETS">Es sind noch keine Ziele konfiguriert.</string>
   <string name="PLG_PROVISIONING_NOTIFY_ADMINS">Administratoren über Probleme benachrichtigen</string>
   <string name="PLG_PROVISIONING_NOTIFY_ADMINS_DESC">Sendet den Administratoren der Organisation höchstens eine E-Mail pro Ziel und Tag, wenn Konten oder Gruppen Aufmerksamkeit erfordern.</string>
+  <string name="PLG_PROVISIONING_OAUTH_AUTH_METHOD">OAuth-Client-Authentifizierung</string>
   <string name="PLG_PROVISIONING_OAUTH_CLIENT_ID">OAuth-Client-ID</string>
   <string name="PLG_PROVISIONING_OAUTH_CLIENT_SECRET">OAuth-Client-Secret</string>
+  <string name="PLG_PROVISIONING_OAUTH_CLIENT_SECRET_BASIC">Client-ID und Secret als HTTP-Basic-Zugangsdaten</string>
+  <string name="PLG_PROVISIONING_OAUTH_CLIENT_SECRET_POST">Client-ID und Secret im Anfragetext</string>
   <string name="PLG_PROVISIONING_OAUTH_SCOPE">OAuth-Scope</string>
   <string name="PLG_PROVISIONING_OAUTH_TOKEN_URL">OAuth-Token-URL</string>
   <string name="PLG_PROVISIONING_QUEUE">Warteschlange</string>
@@ -76,6 +84,8 @@
   <string name="PLG_PROVISIONING_RETRY_QUEUED">#VAR1# Einträge werden erneut versucht.</string>
   <string name="PLG_PROVISIONING_SCIM_BASE_URL">SCIM-Basis-URL</string>
   <string name="PLG_PROVISIONING_SCIM_BASE_URL_DESC">Die URL, unter der das Zielsystem /Users und /Groups anbietet, z. B. https://cloud.example.org/scim/v2.</string>
+  <string name="PLG_PROVISIONING_SCIM_DELETE_INACTIVE">Konten löschen statt deaktivieren</string>
+  <string name="PLG_PROVISIONING_SCIM_DELETE_INACTIVE_DESC">Für Zielsysteme ohne das Attribut „active“. Ein Konto, das nicht mehr zum Ziel gehört, wird gelöscht; kommt der Benutzer zurück, wird ein neues Konto angelegt.</string>
   <string name="PLG_PROVISIONING_SCIM_DEPARTMENT">Abteilung</string>
   <string name="PLG_PROVISIONING_SCIM_DISPLAY_NAME">Anzeigename</string>
   <string name="PLG_PROVISIONING_SCIM_EMAIL">E-Mail</string>
@@ -84,6 +94,8 @@
   <string name="PLG_PROVISIONING_SCIM_GIVEN_NAME">Vorname</string>
   <string name="PLG_PROVISIONING_SCIM_MIDDLE_NAME">Zweiter Vorname</string>
   <string name="PLG_PROVISIONING_SCIM_NICK_NAME">Spitzname</string>
+  <string name="PLG_PROVISIONING_SCIM_NO_GROUPS">Zielsystem ohne Gruppen</string>
+  <string name="PLG_PROVISIONING_SCIM_NO_GROUPS_DESC">Für Zielsysteme, die /Groups nicht anbieten. Es werden nur Konten übertragen.</string>
   <string name="PLG_PROVISIONING_SCIM_ORGANIZATION">Organisation</string>
   <string name="PLG_PROVISIONING_SCIM_PHONE">Telefon</string>
   <string name="PLG_PROVISIONING_SCIM_PREFERRED_LANGUAGE">Bevorzugte Sprache</string>
@@ -100,6 +112,7 @@
   <string name="PLG_PROVISIONING_SSO_LINK_DESC">Mit einem SSO-Client verknüpft überträgt das Ziel die Benutzer, die sich bei dem Client anmelden dürfen, und verwendet dessen Rollenzuordnung als Gruppen und dessen Benutzerkennung als Kontonamen.</string>
   <string name="PLG_PROVISIONING_SSO_LINK_NONE">nicht verknüpft</string>
   <string name="PLG_PROVISIONING_STATE">Status</string>
+  <string name="PLG_PROVISIONING_STATE_DEPROVISIONING">Wird deprovisioniert</string>
   <string name="PLG_PROVISIONING_STATE_OK">OK</string>
   <string name="PLG_PROVISIONING_STATE_PARTIAL">Teilweise fehlgeschlagen</string>
   <string name="PLG_PROVISIONING_STATE_PAUSED">Pausiert</string>

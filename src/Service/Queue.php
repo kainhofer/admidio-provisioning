@@ -105,11 +105,13 @@ class Queue
     }
 
     /**
-     * Due items of a target, accounts before groups, oldest first.
+     * Due items of a target, oldest first: accounts before groups, so that new members exist
+     * before they are added - or groups before accounts when a target is deprovisioned, so that
+     * nothing is left in a group that is about to be deleted anyway.
      *
      * @return array<int,array<string,mixed>>
      */
-    public function dueItems(int $targetId, int $limit = 50): array
+    public function dueItems(int $targetId, int $limit = 50, bool $groupsFirst = false): array
     {
         $now = ProvisioningPlugin::now();
         return $this->db->getArrayFromSql(
@@ -121,7 +123,7 @@ class Queue
                 AND (pvq_lease_token IS NULL OR pvq_lease_expires < ?)
               ORDER BY CASE WHEN pvq_type = ? THEN 0 ELSE 1 END, pvq_id
               LIMIT ' . max(1, $limit),
-            array($targetId, self::STATE_PENDING, $now, $now, self::TYPE_ACCOUNT)
+            array($targetId, self::STATE_PENDING, $now, $now, $groupsFirst ? self::TYPE_GROUP : self::TYPE_ACCOUNT)
         );
     }
 

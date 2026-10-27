@@ -94,3 +94,13 @@ CliTaskRegistry::register(
         $format
     )
 );
+
+CliTaskRegistry::register(
+    'provisioning:deprovision',
+    ProvisioningPlugin::ID,
+    array(ProvisioningCli::class, 'deprovision'),
+    'Delete the groups and accounts Admidio created on the target system, then remove the target.',
+    'provisioning:deprovision --target=UUID --yes',
+    array(),
+    array($target)
+);

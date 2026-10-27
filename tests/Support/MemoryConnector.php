@@ -23,6 +23,8 @@ class MemoryConnector extends Connector
     public static array $calls = array();
     /** @var ConnectorError|null Thrown by the next call. */
     public static ?ConnectorError $failNext = null;
+    /** @var array<string,bool> Capabilities that differ from the defaults. */
+    public static array $capabilities = array();
 
     private static int $sequence = 0;
 
@@ -32,6 +34,7 @@ class MemoryConnector extends Connector
         self::$groups = array();
         self::$calls = array();
         self::$failNext = null;
+        self::$capabilities = array();
     }
 
     public static function getLabel(): string
@@ -51,7 +54,9 @@ class MemoryConnector extends Connector
 
     public function getCapabilities(): array
     {
-        return array('accounts' => true, 'deactivate' => true, 'memberKey' => self::MEMBER_KEY_REMOTE_ID, 'verify' => true);
+        return self::$capabilities + array(
+            'accounts' => true, 'deactivate' => true, 'groups' => true, 'memberKey' => self::MEMBER_KEY_REMOTE_ID, 'verify' => true
+        );
     }
 
     public function test(): array

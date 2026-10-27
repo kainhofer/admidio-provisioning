@@ -4,7 +4,7 @@
  * Provisioning plugin - targets (landing page): list, edit, status and actions.
  *
  * Parameters:
- * mode      : list (default) | edit | save | status | delete | test | sync | verify | retry
+ * mode      : list (default) | edit | save | status | delete | deprovision | test | sync | verify | retry
  * uuid      : UUID of the target
  * connector : connector type of a new target (edit, save)
  * step      : start | continue (sync, verify)
@@ -34,7 +34,7 @@ try {
 
     $getMode = admFuncVariableIsValid($_GET, 'mode', 'string', array(
         'defaultValue' => 'list',
-        'validValues' => array('list', 'edit', 'save', 'status', 'delete', 'test', 'sync', 'verify', 'retry')
+        'validValues' => array('list', 'edit', 'save', 'status', 'delete', 'deprovision', 'test', 'sync', 'verify', 'retry')
     ));
     $getUuid = admFuncVariableIsValid($_GET, 'uuid', 'uuid');
     $getConnector = admFuncVariableIsValid($_GET, 'connector', 'string');
@@ -97,6 +97,11 @@ try {
             echo json_encode(array('status' => 'success'));
             break;
 
+        case 'deprovision':
+            $service->deprovision($service->getTarget($getUuid));
+            echo json_encode(array('status' => 'success', 'message' => $gL10n->get('PLG_PROVISIONING_DEPROVISION_STARTED')));
+            break;
+
         case 'test':
             $details = $service->test($service->getTarget($getUuid));
             $lines = array();
@@ -157,5 +162,5 @@ try {
             break;
     }
 } catch (Throwable $e) {
-    handleException($e, in_array($getMode ?? '', array('save', 'delete', 'test', 'sync', 'verify', 'retry'), true));
+    handleException($e, in_array($getMode ?? '', array('save', 'delete', 'deprovision', 'test', 'sync', 'verify', 'retry'), true));
 }

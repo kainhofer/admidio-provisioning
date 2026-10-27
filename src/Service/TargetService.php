@@ -80,6 +80,8 @@ class TargetService
             $target->setValue('pvt_connector', $connector);
         } elseif ((int) $target->getValue('pvt_org_id') !== (int) $gCurrentOrgId) {
             throw new Exception('SYS_NO_RIGHTS');
+        } else {
+            $this->refuseWhileDeprovisioning($target);
         }
 
         $name = trim((string) ($values['pvt_name'] ?? ''));
@@ -130,13 +132,63 @@ class TargetService
      */
     public function disconnect(Target $target): void
     {
-        global $gCurrentOrgId;
+        $this->requireOwnTarget($target);
+        $this->removeTarget($target);
+    }
 
-        self::requireAdministrator();
-        if ($target->isNewRecord() || (int) $target->getValue('pvt_org_id') !== (int) $gCurrentOrgId) {
-            throw new Exception('SYS_NO_RIGHTS');
+    /**
+     * Deprovision: delete the groups and then the accounts that Admidio created on the target
+     * system, and remove the target afterwards. The work goes through the queue, so it survives
+     * interruptions and failures of the target; the target is disabled, so that nothing new is
+     * planned for it in the meantime.
+     *
+     * @throws Exception
+     */
+    public function deprovision(Target $target): void
+    {
+        $this->requireOwnTarget($target);
+        $targetId = $target->getId();
+        $queue = new Queue($this->db);
+
+        $target->setValue('pvt_enabled', false);
+        $target->save();
+
+        $queue->clear($targetId);
+        (new TargetStatus($this->db))->startDeprovisioning($targetId);
+
+        // groups that were never created on the target can go at once
+        $this->db->queryPrepared(
+            'DELETE FROM ' . ProvisioningTables::groups() . ' WHERE pvg_pvt_id = ? AND pvg_remote_id IS NULL',
+            array($targetId)
+        );
+        $this->db->queryPrepared(
+            'UPDATE ' . ProvisioningTables::groups() . ' SET pvg_state = ? WHERE pvg_pvt_id = ?',
+            array(Group::STATE_DELETE, $targetId)
+        );
+        foreach ($this->db->queryPrepared(
+            'SELECT pvg_uuid FROM ' . ProvisioningTables::groups() . ' WHERE pvg_pvt_id = ?',
+            array($targetId)
+        )->fetchAll(\PDO::FETCH_COLUMN) as $groupUuid) {
+            $queue->enqueue($targetId, Queue::TYPE_GROUP, (string) $groupUuid);
+        }
+        foreach ($this->db->queryPrepared(
+            'SELECT pva_usr_uuid FROM ' . ProvisioningTables::accounts() . ' WHERE pva_pvt_id = ?',
+            array($targetId)
+        )->fetchAll(\PDO::FETCH_COLUMN) as $userUuid) {
+            $queue->enqueue($targetId, Queue::TYPE_ACCOUNT, (string) $userUuid);
         }
 
+        ChangeCollector::reset();
+        RequestRunner::markQueued();
+    }
+
+    /**
+     * Remove a target with everything that belongs to it, without asking for rights: disconnect()
+     * and the end of a deprovisioning, which may happen in a cron run or at the end of the request
+     * of any user, after the administrator started it.
+     */
+    public function removeTarget(Target $target): void
+    {
         // The foreign keys remove the dependent rows. They are deleted explicitly anyway, because
         // MySQL with foreign key checks switched off would leave them behind.
         $targetId = $target->getId();
@@ -162,7 +214,8 @@ class TargetService
 
     public function enable(Target $target, bool $enabled): void
     {
-        self::requireAdministrator();
+        $this->requireOwnTarget($target);
+        $this->refuseWhileDeprovisioning($target);
         $target->setValue('pvt_enabled', $enabled);
         $target->save();
         if ($enabled) {
@@ -410,6 +463,29 @@ class TargetService
     {
         $allowed = array_column($this->selectableRoles(), 0);
         return array_values(array_intersect(array_map('intval', $roleIds), $allowed));
+    }
+
+    /**
+     * @throws Exception
+     */
+    private function requireOwnTarget(Target $target): void
+    {
+        global $gCurrentOrgId;
+
+        self::requireAdministrator();
+        if ($target->isNewRecord() || (int) $target->getValue('pvt_org_id') !== (int) $gCurrentOrgId) {
+            throw new Exception('SYS_NO_RIGHTS');
+        }
+    }
+
+    /**
+     * @throws Exception
+     */
+    private function refuseWhileDeprovisioning(Target $target): void
+    {
+        if ((new TargetStatus($this->db))->isDeprovisioning($target->getId())) {
+            throw new Exception('PLG_PROVISIONING_DEPROVISIONING_LOCKED');
+        }
     }
 
     /**

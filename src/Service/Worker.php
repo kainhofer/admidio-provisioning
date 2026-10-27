@@ -37,6 +37,9 @@ class Worker
     /** @var array<int,bool> Group items put back in this run because members were missing. */
     private array $deferredGroups = array();
 
+    /** Whether the target is being deprovisioned: everything is deleted, groups first. */
+    private bool $deprovisioning = false;
+
     public function __construct(private readonly Database $db, private readonly Target $target, ?Connector $connector = null)
     {
         $this->queue = new Queue($db);
@@ -68,6 +71,7 @@ class Worker
             return $result;
         }
 
+        $this->deprovisioning = $this->status->isDeprovisioning($targetId);
         $deadline = $budgetSeconds === null ? null : microtime(true) + $budgetSeconds;
         $retryErrors = 0;
         $seen = array();
@@ -75,7 +79,7 @@ class Worker
         try {
             while ($deadline === null || microtime(true) < $deadline) {
                 $items = array_filter(
-                    $this->queue->dueItems($targetId),
+                    $this->queue->dueItems($targetId, 50, $this->deprovisioning),
                     static fn(array $item): bool => !isset($seen[(int) $item['pvq_id']])
                 );
                 if ($items === array()) {
@@ -157,9 +161,11 @@ class Worker
 
     private function processAccount(string $userUuid): void
     {
-        $desired = $this->planner->desiredAccount($userUuid);
         $mapping = $this->accountMapping($userUuid);
         $capabilities = $this->connector->getCapabilities();
+        $desired = $this->deprovisioning
+            ? array('state' => 'deleted', 'account' => null, 'usr_id' => 0)
+            : $this->planner->desiredAccount($userUuid);
 
         if ($desired['state'] === 'active') {
             $this->provisionAccount($desired['account'], $desired['usr_id'], $mapping, $capabilities);
@@ -186,7 +192,19 @@ class Worker
         }
 
         $account = $desired['account'];
-        if ($capabilities['accounts'] && $capabilities['deactivate'] && $remoteId !== '' && (bool) $mapping['pva_active']) {
+        if ($capabilities['accounts'] && !$capabilities['deactivate']) {
+            // A target that cannot deactivate accounts loses the account instead. Should the user
+            // come back, a new account is created.
+            if ($remoteId !== '') {
+                $this->connector->deleteAccount($remoteId);
+            }
+            $this->db->queryPrepared(
+                'DELETE FROM ' . ProvisioningTables::accounts() . ' WHERE pva_id = ?',
+                array((int) $mapping['pva_id'])
+            );
+            return;
+        }
+        if ($capabilities['accounts'] && $remoteId !== '' && (bool) $mapping['pva_active']) {
             try {
                 $this->connector->deactivateAccount($remoteId, $account);
             } catch (ConnectorError $error) {

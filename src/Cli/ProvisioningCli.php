@@ -144,6 +144,33 @@ final class ProvisioningCli
         return CliApplication::EXIT_SUCCESS;
     }
 
+    public static function deprovision(array $arguments, array $options): int
+    {
+        global $gDb;
+
+        $service = new TargetService($gDb);
+        $target = self::requireTarget($service, $options);
+        CliApplication::confirm(
+            'Delete every group and account Admidio created on the target system of "' . $target->readableName() . '", and then the target?',
+            $options
+        );
+
+        RequestRunner::skip();
+        $service->deprovision($target);
+        $result = (new Scheduler($gDb))->run(array('target' => $target, 'cli' => true))[0];
+
+        if ($result['message'] === 'PLG_PROVISIONING_DEPROVISIONED') {
+            CliApplication::writeSuccess('The target was deprovisioned and removed.', $options);
+            return CliApplication::EXIT_SUCCESS;
+        }
+        CliApplication::writeWarning(
+            'PROVISIONING_DEPROVISION_INCOMPLETE',
+            'Not everything could be deleted yet (' . $result['failed'] . ' failed). The next provisioning:sync continues.',
+            $options
+        );
+        return CliApplication::EXIT_FAILED;
+    }
+
     private static function requireTarget(TargetService $service, array $options): Target
     {
         $uuid = CliApplication::optionString($options, 'target');

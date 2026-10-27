@@ -1,27 +1,19 @@
 <?php
 namespace AdmidioPlugin\Provisioning\Tests\Integration;
 
-use Admidio\Hooks\Hooks;
 use Admidio\Hooks\ValueObject\EntityChangeSet;
 use Admidio\Hooks\ValueObject\EntityFieldChange;
-use Admidio\Infrastructure\Database;
-use Admidio\Tests\Integration\Sso\SsoClientFixture;
-use Admidio\Tests\Support\AdministratorTestCase;
-use Admidio\Tests\Support\AdmidioTestFixture;
 use AdmidioPlugin\Provisioning\Connector\ConnectorError;
-use AdmidioPlugin\Provisioning\Connector\Connectors;
-use AdmidioPlugin\Provisioning\Connector\Scim\ScimConnector;
-use AdmidioPlugin\Provisioning\Entity\Group;
 use AdmidioPlugin\Provisioning\Entity\Target;
 use AdmidioPlugin\Provisioning\ProvisioningTables;
 use AdmidioPlugin\Provisioning\Service\ChangeCollector;
 use AdmidioPlugin\Provisioning\Service\Planner;
 use AdmidioPlugin\Provisioning\Service\Queue;
-use AdmidioPlugin\Provisioning\Service\Scheduler;
 use AdmidioPlugin\Provisioning\Service\TargetService;
 use AdmidioPlugin\Provisioning\Service\TargetStatus;
 use AdmidioPlugin\Provisioning\Service\Worker;
 use AdmidioPlugin\Provisioning\Tests\Support\MemoryConnector;
+use AdmidioPlugin\Provisioning\Tests\Support\ProvisioningDatabaseTestCase;
 
 require_once dirname(__DIR__) . '/Support/autoload.php';
 
@@ -30,133 +22,8 @@ require_once dirname(__DIR__) . '/Support/autoload.php';
  * who belongs to a target, what is sent, and what happens when memberships end, users are deleted
  * or the target answers with an error.
  */
-final class ProvisioningTest extends AdministratorTestCase
+final class ProvisioningTest extends ProvisioningDatabaseTestCase
 {
-    use SsoClientFixture;
-
-    private AdmidioTestFixture $fixture;
-
-    public static function setUpBeforeClass(): void
-    {
-        parent::setUpBeforeClass();
-
-        // The schema is created outside of the per-test transaction: DDL commits implicitly.
-        $db = self::$gDb;
-        $directory = dirname(__DIR__, 2) . '/db_scripts/';
-        foreach (array('uninstall.sql', 'install.sql') as $file) {
-            foreach (Database::getSqlStatementsFromSqlFile($directory . $file) as $statement) {
-                $db->queryPrepared($statement);
-            }
-        }
-    }
-
-    public static function tearDownAfterClass(): void
-    {
-        foreach (Database::getSqlStatementsFromSqlFile(dirname(__DIR__, 2) . '/db_scripts/uninstall.sql') as $statement) {
-            self::$gDb->queryPrepared($statement);
-        }
-        parent::tearDownAfterClass();
-    }
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        $this->fixture = new AdmidioTestFixture($this->getDatabase());
-        MemoryConnector::reset();
-        ChangeCollector::reset();
-        Hooks::addFilter(Connectors::HOOK, static function (array $connectors): array {
-            $connectors['memory'] = MemoryConnector::class;
-            $connectors['scim'] = ScimConnector::class;
-            return $connectors;
-        }, 10, 1, 'provisioning-test-connectors');
-        // the plugin is not enabled in the test installation; administrators may administer it here
-        Hooks::addFilter('component_administrable', static function (bool $answer, string $component): bool {
-            return $component === 'provisioning' ? $GLOBALS['gCurrentUser']->isAdministrator() : $answer;
-        }, 10, 2, 'provisioning-test-administrable');
-    }
-
-    protected function tearDown(): void
-    {
-        Hooks::removeFilter('component_administrable', 'provisioning-test-administrable');
-        Hooks::removeFilter(Connectors::HOOK, 'provisioning-test-connectors');
-        parent::tearDown();
-    }
-
-    protected function getFixture(): AdmidioTestFixture
-    {
-        return $this->fixture;
-    }
-
-    /**
-     * @param array<int,int> $userRoles
-     */
-    private function createTarget(array $userRoles, bool $catchAll = false, ?array $ssoLink = null): Target
-    {
-        global $gCurrentOrgId;
-
-        $target = new Target($this->getDatabase());
-        $target->setValue('pvt_org_id', (int) $gCurrentOrgId);
-        $target->setValue('pvt_name', 'Test target ' . $this->suffix());
-        $target->setValue('pvt_connector', 'memory');
-        $target->setValue('pvt_enabled', true);
-        $target->setUserRoleIds($userRoles);
-        $target->setAttributeMapping(array(array('path' => 'displayName', 'source' => 'usr_login_name')));
-        $target->setValue('pvt_group_catchall', $catchAll);
-        if ($ssoLink !== null) {
-            $target->setValue('pvt_sso_type', $ssoLink[0]);
-            $target->setValue('pvt_sso_client_id', $ssoLink[1]);
-        }
-        $target->save();
-        return $target;
-    }
-
-    /**
-     * @param array<int,int> $roleIds negative IDs for leaders
-     */
-    private function createGroup(Target $target, string $name, array $roleIds): Group
-    {
-        $group = new Group($this->getDatabase());
-        $group->setValue('pvg_pvt_id', $target->getId());
-        $group->setValue('pvg_source', Group::SOURCE_MANUAL);
-        $group->setValue('pvg_key', $name . '-' . $this->suffix());
-        $group->setValue('pvg_name', $name);
-        $group->setRoleIds($roleIds);
-        $group->save();
-        return $group;
-    }
-
-    /**
-     * @return array<string,mixed>
-     */
-    private function sync(Target $target, array $options = array()): array
-    {
-        return (new Scheduler($this->getDatabase()))->run($options + array('target' => $target, 'full' => true))[0];
-    }
-
-    /**
-     * @return array{0: array<string,mixed>, 1: array<string,mixed>} role, user
-     */
-    private function member(string $name, string $begin = DATE_NOW, string $end = DATE_MAX, ?array $role = null, bool $leader = false): array
-    {
-        global $gCurrentOrgId;
-
-        $role ??= $this->fixture->createAndSaveRole('Role ' . $name . ' ' . $this->suffix(), (int) $gCurrentOrgId);
-        $user = $this->fixture->createAndSaveUser('prov-' . $name . '-' . $this->suffix(), $name . '@example.local');
-        $this->fixture->assignUserToRolePeriod($user['usr_id'], $role['rol_id'], $begin, $end, $leader);
-        return array($role, $user);
-    }
-
-    private static function yesterday(): string
-    {
-        return date('Y-m-d', strtotime(DATE_NOW . ' -1 day'));
-    }
-
-    private static function tomorrow(): string
-    {
-        return date('Y-m-d', strtotime(DATE_NOW . ' +1 day'));
-    }
-
     public function testMembersOfTheSelectedRolesAreProvisioned(): void
     {
         [$role, $member] = $this->member('member');
@@ -503,5 +370,79 @@ final class ProvisioningTest extends AdministratorTestCase
         $this->assertSame(array(array('path' => 'name.givenName', 'source' => 'FIRST_NAME')), $target->getAttributeMapping());
         $this->assertContains('pvt_secrets', $target->getIgnoredLogColumns());
         $this->assertNull((new TargetStatus($this->getDatabase()))->get($target->getId())['pvs_last_reconcile_date']);
+    }
+
+    public function testDeprovisioningDeletesGroupsAndAccountsAndThenTheTarget(): void
+    {
+        [$role, $user] = $this->member('deprovision');
+        $target = $this->createTarget(array($role['rol_id']));
+        $this->createGroup($target, 'Gone', array($role['rol_id']));
+        $this->sync($target);
+        $this->assertNotNull(MemoryConnector::accountByKey($user['usr_uuid']));
+
+        (new TargetService($this->getDatabase()))->deprovision($target);
+        $this->assertTrue((new TargetStatus($this->getDatabase()))->isDeprovisioning($target->getId()));
+        $result = $this->sync($target);
+
+        $this->assertSame('PLG_PROVISIONING_DEPROVISIONED', $result['message']);
+        $this->assertSame(array(), MemoryConnector::$accounts);
+        $this->assertSame(array(), MemoryConnector::$groups);
+        // the group went before the accounts
+        $calls = array_values(array_filter(MemoryConnector::$calls, static fn(string $c): bool => str_starts_with($c, 'delete')));
+        $this->assertStringStartsWith('deleteGroup', $calls[0]);
+        $this->assertSame(0, (int) $this->getDatabase()->queryPrepared(
+            'SELECT COUNT(*) FROM ' . ProvisioningTables::targets() . ' WHERE pvt_id = ?',
+            array($target->getId())
+        )->fetchColumn());
+    }
+
+    public function testADeprovisioningTargetWaitsForItemsThatFailedAndCannotBeEdited(): void
+    {
+        [$role] = $this->member('deprovision-fail');
+        $target = $this->createTarget(array($role['rol_id']));
+        $this->sync($target);
+
+        $service = new TargetService($this->getDatabase());
+        $service->deprovision($target);
+        MemoryConnector::$failNext = ConnectorError::invalid('refused');
+        $result = $this->sync($target);
+
+        $this->assertSame(TargetStatus::STATE_DEPROVISIONING, $result['state']);
+        $this->assertSame(1, (new Queue($this->getDatabase()))->counts($target->getId())[Queue::STATE_ATTENTION]);
+        $this->expectException(\Admidio\Infrastructure\Exception::class);
+        $service->enable($target, true);
+    }
+
+    public function testATargetThatCannotDeactivateLosesTheAccount(): void
+    {
+        [$role, $user] = $this->member('no-deactivate');
+        $target = $this->createTarget(array($role['rol_id']));
+        $this->sync($target);
+
+        MemoryConnector::$capabilities = array('deactivate' => false);
+        $this->getDatabase()->queryPrepared(
+            'UPDATE ' . TBL_MEMBERS . ' SET mem_end = ? WHERE mem_usr_id = ?',
+            array(DATE_NOW, $user['usr_id'])
+        );
+        $this->sync($target);
+
+        $this->assertNull(MemoryConnector::accountByKey($user['usr_uuid']));
+        $this->assertSame(0, (int) $this->getDatabase()->queryPrepared(
+            'SELECT COUNT(*) FROM ' . ProvisioningTables::accounts() . ' WHERE pva_usr_uuid = ?',
+            array($user['usr_uuid'])
+        )->fetchColumn());
+    }
+
+    public function testATargetWithoutGroupsGetsAccountsOnly(): void
+    {
+        [$role, $user] = $this->member('no-groups');
+        $target = $this->createTarget(array($role['rol_id']));
+        $this->createGroup($target, 'Unsupported', array($role['rol_id']));
+        MemoryConnector::$capabilities = array('groups' => false);
+
+        $this->sync($target);
+
+        $this->assertNotNull(MemoryConnector::accountByKey($user['usr_uuid']));
+        $this->assertSame(array(), MemoryConnector::$groups);
     }
 }

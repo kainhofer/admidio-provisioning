@@ -58,8 +58,18 @@ class ScimConnector extends Connector
             'oauth_client_id' => array('type' => 'string', 'label' => 'PLG_PROVISIONING_OAUTH_CLIENT_ID'),
             'oauth_client_secret' => array('type' => 'string', 'secret' => true, 'label' => 'PLG_PROVISIONING_OAUTH_CLIENT_SECRET'),
             'oauth_scope' => array('type' => 'string', 'label' => 'PLG_PROVISIONING_OAUTH_SCOPE'),
+            'oauth_auth_method' => array('type' => 'enum', 'label' => 'PLG_PROVISIONING_OAUTH_AUTH_METHOD',
+                'default' => ScimClient::OAUTH_CLIENT_SECRET_POST,
+                'values' => array(
+                    ScimClient::OAUTH_CLIENT_SECRET_POST => 'PLG_PROVISIONING_OAUTH_CLIENT_SECRET_POST',
+                    ScimClient::OAUTH_CLIENT_SECRET_BASIC => 'PLG_PROVISIONING_OAUTH_CLIENT_SECRET_BASIC'
+                )),
             'use_put' => array('type' => 'boolean', 'default' => false, 'label' => 'PLG_PROVISIONING_SCIM_USE_PUT',
-                'description' => 'PLG_PROVISIONING_SCIM_USE_PUT_DESC')
+                'description' => 'PLG_PROVISIONING_SCIM_USE_PUT_DESC'),
+            'no_groups' => array('type' => 'boolean', 'default' => false, 'label' => 'PLG_PROVISIONING_SCIM_NO_GROUPS',
+                'description' => 'PLG_PROVISIONING_SCIM_NO_GROUPS_DESC'),
+            'delete_inactive' => array('type' => 'boolean', 'default' => false, 'label' => 'PLG_PROVISIONING_SCIM_DELETE_INACTIVE',
+                'description' => 'PLG_PROVISIONING_SCIM_DELETE_INACTIVE_DESC')
         );
     }
 
@@ -95,7 +105,8 @@ class ScimConnector extends Connector
     {
         return array(
             'accounts' => true,
-            'deactivate' => true,
+            'deactivate' => empty($this->config['delete_inactive']),
+            'groups' => empty($this->config['no_groups']),
             'memberKey' => self::MEMBER_KEY_REMOTE_ID,
             'verify' => true
         );

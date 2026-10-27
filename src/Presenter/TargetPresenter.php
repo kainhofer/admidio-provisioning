@@ -25,7 +25,7 @@ class TargetPresenter extends ProvisioningPresenter
      */
     public function createList(): void
     {
-        global $gDb, $gL10n, $gCurrentOrgId;
+        global $gDb, $gL10n, $gCurrentOrgId, $gCurrentSession;
 
         $this->setHtmlID('adm_provisioning_targets');
         $this->setHeadline($gL10n->get('PLG_PROVISIONING_TARGETS'));
@@ -93,6 +93,14 @@ class TargetPresenter extends ProvisioningPresenter
                         'icon' => 'bi bi-pencil-square', 'tooltip' => $gL10n->get('SYS_EDIT')),
                     array('url' => $this->pageUrl('groups.php', array('target_uuid' => $uuid)),
                         'icon' => 'bi bi-people', 'tooltip' => $gL10n->get('PLG_PROVISIONING_GROUPS')),
+                    array(
+                        'dataHref' => 'callUrlHideElement(\'' . $rowId . '\', \''
+                            . $this->pageUrl('index.php', array('mode' => 'deprovision', 'uuid' => $uuid)) . '\', \''
+                            . $gCurrentSession->getCsrfToken() . '\', \'provisioningReload\')',
+                        'dataMessage' => $gL10n->get('PLG_PROVISIONING_DEPROVISION_CONFIRM', array($target->readableName())),
+                        'icon' => 'bi bi-x-octagon',
+                        'tooltip' => $gL10n->get('PLG_PROVISIONING_DEPROVISION')
+                    ),
                     $this->deleteAction(
                         $rowId,
                         $this->pageUrl('index.php', array('mode' => 'delete', 'uuid' => $uuid)),
@@ -117,6 +125,8 @@ class TargetPresenter extends ProvisioningPresenter
         $this->assignSmartyVariable('rows', $rows);
         $this->assignSmartyVariable('messageNoData', $gL10n->get('PLG_PROVISIONING_NO_TARGETS'));
         $this->assignSmartyVariable('alert', $cronWarning ? $gL10n->get('PLG_PROVISIONING_NO_CRON_WARNING') : '');
+        // a deprovisioned target stays in the list until its deletions are done
+        $this->addJavascript('window.provisioningReload = function () { window.location.reload(); };');
         $this->addHtmlByTemplate('provisioning.list.tpl');
     }
 

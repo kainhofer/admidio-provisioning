@@ -48,8 +48,31 @@ class Scheduler
     }
 
     /**
-     * Whether anything is due for the enabled targets of the current organization: a reconciliation
-     * or queue items. One query, cheap enough to be asked at the end of every request.
+     * The targets of the current organization that runs process: the enabled ones and those that
+     * are being deprovisioned (which are disabled, so that nothing new is planned for them).
+     *
+     * @return array<int,Target>
+     */
+    public function runnableTargets(): array
+    {
+        global $gCurrentOrgId;
+
+        $targets = array();
+        foreach ($this->db->queryPrepared(
+            'SELECT pvt_id FROM ' . ProvisioningTables::targets() . '
+               LEFT JOIN ' . ProvisioningTables::status() . ' ON pvs_pvt_id = pvt_id
+              WHERE pvt_org_id = ? AND (pvt_enabled = true OR pvs_state = ?)
+              ORDER BY pvt_name',
+            array((int) $gCurrentOrgId, TargetStatus::STATE_DEPROVISIONING)
+        )->fetchAll(\PDO::FETCH_COLUMN) as $targetId) {
+            $targets[] = new Target($this->db, (int) $targetId);
+        }
+        return $targets;
+    }
+
+    /**
+     * Whether anything is due for the targets of the current organization: a reconciliation or
+     * queue items. One query, cheap enough to be asked at the end of every request.
      */
     public function hasDueWork(): bool
     {
@@ -60,13 +83,13 @@ class Scheduler
             'SELECT COUNT(*)
                FROM ' . ProvisioningTables::targets() . '
                LEFT JOIN ' . ProvisioningTables::status() . ' ON pvs_pvt_id = pvt_id
-              WHERE pvt_org_id = ? AND pvt_enabled = true
-                AND (pvs_pvt_id IS NULL
-                     OR pvs_last_reconcile_date IS NULL
-                     OR pvs_last_reconcile_date < ?
-                     OR EXISTS (SELECT 1 FROM ' . ProvisioningTables::queue() . '
-                                 WHERE pvq_pvt_id = pvt_id AND pvq_state = ? AND pvq_not_before <= ?))',
-            array((int) $gCurrentOrgId, DATE_NOW, Queue::STATE_PENDING, $now)
+              WHERE pvt_org_id = ?
+                AND ((pvt_enabled = true
+                      AND (pvs_pvt_id IS NULL OR pvs_last_reconcile_date IS NULL OR pvs_last_reconcile_date < ?))
+                     OR ((pvt_enabled = true OR pvs_state = ?)
+                         AND EXISTS (SELECT 1 FROM ' . ProvisioningTables::queue() . '
+                                      WHERE pvq_pvt_id = pvt_id AND pvq_state = ? AND pvq_not_before <= ?)))',
+            array((int) $gCurrentOrgId, DATE_NOW, TargetStatus::STATE_DEPROVISIONING, Queue::STATE_PENDING, $now)
         )->fetchColumn();
 
         return (int) $row > 0;
@@ -84,7 +107,7 @@ class Scheduler
      */
     public function run(array $options = array()): array
     {
-        $targets = isset($options['target']) ? array($options['target']) : $this->enabledTargets();
+        $targets = isset($options['target']) ? array($options['target']) : $this->runnableTargets();
         $deadline = ($options['budget'] ?? null) === null ? null : microtime(true) + (float) $options['budget'];
         $fromCli = (bool) ($options['cli'] ?? false);
         $results = array();
@@ -134,6 +157,10 @@ class Scheduler
             $this->status->ensure($targetId);
             $connector = null;
 
+            if ($this->status->isDeprovisioning($targetId)) {
+                return $this->runDeprovisioning($target, $budget, $fromCli, $summary);
+            }
+
             if (!empty($options['verify'])
                 || ($fromCli && $this->status->isVerificationDue($targetId, $target->getVerifyInterval()))) {
                 $connector = Connectors::forTarget($target);
@@ -168,6 +195,31 @@ class Scheduler
             (new AttentionNotifier($this->db))->notifyIfNeeded($target);
         }
 
+        return $summary;
+    }
+
+    /**
+     * Process the deletions of a target that is being deprovisioned, and remove the target once
+     * nothing is left on the target system. Items that need attention keep the target until an
+     * administrator retries them or disconnects the target.
+     *
+     * @param array<string,mixed> $summary
+     * @return array<string,mixed>
+     */
+    private function runDeprovisioning(Target $target, ?float $budget, bool $fromCli, array $summary): array
+    {
+        $targetId = $target->getId();
+        $summary = array_merge($summary, (new Worker($this->db, $target))->run($budget));
+        $summary['state'] = TargetStatus::STATE_DEPROVISIONING;
+
+        $counts = $this->queue->counts($targetId);
+        if ($counts[Queue::STATE_PENDING] === 0 && $counts[Queue::STATE_ATTENTION] === 0) {
+            (new TargetService($this->db))->removeTarget($target);
+            $summary['message'] = 'PLG_PROVISIONING_DEPROVISIONED';
+            return $summary;
+        }
+
+        $this->status->markRun($targetId, TargetStatus::STATE_DEPROVISIONING, (string) $summary['message'], $fromCli);
         return $summary;
     }
 

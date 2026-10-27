@@ -264,4 +264,27 @@ final class ScimConnectorTest extends AdmidioTestCase
 
         $this->assertContains('Authorization: Basic ' . base64_encode('admidio:pw'), $this->requests[0]['headers']);
     }
+
+    public function testOauthClientSecretBasicSendsTheCredentialsAsHeader(): void
+    {
+        $this->respond(200, array('access_token' => 'oauth-token'));
+        $this->respond(201, array('id' => 'remote-1'));
+
+        $this->connector(
+            array('auth_type' => 'oauth', 'oauth_token_url' => 'https://idp.example/token', 'oauth_client_id' => 'admi dio',
+                'oauth_auth_method' => 'client_secret_basic'),
+            array('oauth_client_secret' => 's3cret')
+        )->createAccount($this->account());
+
+        $this->assertContains('Authorization: Basic ' . base64_encode('admi+dio:s3cret'), $this->requests[0]['headers']);
+    }
+
+    public function testCompatibilityOptionsChangeTheCapabilities(): void
+    {
+        $capabilities = $this->connector(array('no_groups' => true, 'delete_inactive' => true))->getCapabilities();
+
+        $this->assertFalse($capabilities['groups']);
+        $this->assertFalse($capabilities['deactivate']);
+        $this->assertTrue($this->connector()->getCapabilities()['groups']);
+    }
 }

@@ -15,6 +15,8 @@ class TargetStatus
     public const STATE_OK = 'ok';
     public const STATE_PARTIAL = 'partial';
     public const STATE_PAUSED = 'paused';
+    /** The target is being removed: its groups and accounts are deleted on the target system. */
+    public const STATE_DEPROVISIONING = 'deprovisioning';
 
     public function __construct(private readonly Database $db)
     {
@@ -137,35 +139,54 @@ class TargetStatus
         );
     }
 
+    /**
+     * Record a run. A deprovisioning target keeps its state, a paused one its state and message.
+     */
     public function markRun(int $targetId, string $state, string $message, bool $fromCli): void
     {
-        $sql = 'UPDATE ' . ProvisioningTables::status() . '
-                   SET pvs_last_run = ?, pvs_state = ?, pvs_message = ?' . ($fromCli ? ', pvs_last_cli_run = ?' : '') . '
-                 WHERE pvs_pvt_id = ? AND (pvs_paused_until IS NULL OR pvs_paused_until < ?)';
-        $params = array(ProvisioningPlugin::now(), $state, mb_substr($message, 0, 2000));
-        if ($fromCli) {
-            $params[] = ProvisioningPlugin::now();
-        }
-        $params[] = $targetId;
-        $params[] = ProvisioningPlugin::now();
-        $this->db->queryPrepared($sql, $params);
+        $now = ProvisioningPlugin::now();
+        $this->db->queryPrepared(
+            'UPDATE ' . ProvisioningTables::status() . '
+                SET pvs_last_run = ?,
+                    pvs_state = CASE WHEN pvs_state = ? THEN pvs_state ELSE ? END,
+                    pvs_message = ?
+              WHERE pvs_pvt_id = ? AND (pvs_paused_until IS NULL OR pvs_paused_until < ?)',
+            array($now, self::STATE_DEPROVISIONING, $state, mb_substr($message, 0, 2000), $targetId, $now)
+        );
 
         if ($fromCli) {
             // a paused target still records that cron is running
             $this->db->queryPrepared(
                 'UPDATE ' . ProvisioningTables::status() . ' SET pvs_last_cli_run = ? WHERE pvs_pvt_id = ?',
-                array(ProvisioningPlugin::now(), $targetId)
+                array($now, $targetId)
             );
         }
+    }
+
+    public function isDeprovisioning(int $targetId): bool
+    {
+        return ($this->get($targetId)['pvs_state'] ?? '') === self::STATE_DEPROVISIONING;
+    }
+
+    public function startDeprovisioning(int $targetId): void
+    {
+        $this->ensure($targetId);
+        $this->db->queryPrepared(
+            'UPDATE ' . ProvisioningTables::status() . '
+                SET pvs_state = ?, pvs_paused_until = NULL, pvs_message = NULL
+              WHERE pvs_pvt_id = ?',
+            array(self::STATE_DEPROVISIONING, $targetId)
+        );
     }
 
     public function pause(int $targetId, int $seconds, string $message): void
     {
         $this->db->queryPrepared(
             'UPDATE ' . ProvisioningTables::status() . '
-                SET pvs_state = ?, pvs_paused_until = ?, pvs_message = ?
+                SET pvs_state = CASE WHEN pvs_state = ? THEN pvs_state ELSE ? END,
+                    pvs_paused_until = ?, pvs_message = ?
               WHERE pvs_pvt_id = ?',
-            array(self::STATE_PAUSED, ProvisioningPlugin::now($seconds), mb_substr($message, 0, 2000), $targetId)
+            array(self::STATE_DEPROVISIONING, self::STATE_PAUSED, ProvisioningPlugin::now($seconds), mb_substr($message, 0, 2000), $targetId)
         );
     }
 
@@ -184,9 +205,9 @@ class TargetStatus
         $this->ensure($targetId);
         $this->db->queryPrepared(
             'UPDATE ' . ProvisioningTables::status() . '
-                SET pvs_paused_until = NULL, pvs_state = ?
-              WHERE pvs_pvt_id = ? AND pvs_state = ?',
-            array(self::STATE_OK, $targetId, self::STATE_PAUSED)
+                SET pvs_paused_until = NULL, pvs_state = CASE WHEN pvs_state = ? THEN ? ELSE pvs_state END
+              WHERE pvs_pvt_id = ?',
+            array(self::STATE_PAUSED, self::STATE_OK, $targetId)
         );
     }
 

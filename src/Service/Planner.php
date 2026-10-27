@@ -7,6 +7,7 @@ use Admidio\SSO\Entity\OIDCClient;
 use Admidio\SSO\Entity\SAMLClient;
 use Admidio\SSO\Entity\SSOClient;
 use AdmidioPlugin\Provisioning\Connector\Account;
+use AdmidioPlugin\Provisioning\Connector\Connectors;
 use AdmidioPlugin\Provisioning\Connector\GroupState;
 use AdmidioPlugin\Provisioning\Entity\Group;
 use AdmidioPlugin\Provisioning\Entity\Target;
@@ -44,6 +45,7 @@ class Planner
     /** @var array<string,array{id:int,type:string,options:array<int,string>}>|null */
     private ?array $fieldDefinitions = null;
     private int $skippedUsers = 0;
+    private ?bool $groupsSupported = null;
 
     public function __construct(private readonly Database $db, private readonly Target $target)
     {
@@ -163,6 +165,9 @@ class Planner
      */
     public function groups(?array $groupIds = null): array
     {
+        if (!$this->groupsSupported()) {
+            return array();
+        }
         $sql = 'SELECT * FROM ' . ProvisioningTables::groups() . ' WHERE pvg_pvt_id = ?';
         $params = array($this->target->getId());
         if ($groupIds !== null) {
@@ -183,6 +188,9 @@ class Planner
      */
     public function syncGroupDefinitions(): void
     {
+        if (!$this->groupsSupported()) {
+            return;
+        }
         $existing = array();
         foreach ($this->groups() as $row) {
             $existing[(string) $row['pvg_source']][(string) $row['pvg_key']] = $row;
@@ -631,6 +639,22 @@ class Planner
         }
 
         return $this->fieldDefinitions;
+    }
+
+    /**
+     * Whether the connector of the target has groups. A target without them gets accounts only.
+     */
+    public function groupsSupported(): bool
+    {
+        if ($this->groupsSupported === null) {
+            try {
+                $this->groupsSupported = (bool) (Connectors::forTarget($this->target)->getCapabilities()['groups'] ?? true);
+            } catch (\InvalidArgumentException) {
+                // a connector that is not registered (any more): plan as if it had groups
+                $this->groupsSupported = true;
+            }
+        }
+        return $this->groupsSupported;
     }
 
     /**

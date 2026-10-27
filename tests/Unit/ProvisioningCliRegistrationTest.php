@@ -13,7 +13,7 @@ require_once dirname(__DIR__) . '/Support/autoload.php';
  */
 final class ProvisioningCliRegistrationTest extends AdmidioTestCase
 {
-    private const COMMANDS = array('provisioning:sync', 'provisioning:status', 'provisioning:test', 'provisioning:queue');
+    private const COMMANDS = array('provisioning:sync', 'provisioning:status', 'provisioning:test', 'provisioning:queue', 'provisioning:deprovision');
 
     public static function setUpBeforeClass(): void
     {

@@ -49,6 +49,18 @@ target has
 The status page of a target shows its queue, the last runs and every account or group that needs
 attention, and offers *Synchronize now*, *Verify now*, *Test connection* and *Retry*.
 
+For SCIM services that deviate from the standard, a target can send complete resources (PUT instead
+of PATCH), work without groups, delete accounts instead of deactivating them, and send the OAuth client
+credentials in the request body or as HTTP Basic credentials.
+
+### Removing a target
+
+* **Disconnect** removes the target in Admidio. Its accounts and groups on the target system remain.
+* **Deprovision** deletes the groups and then the accounts Admidio created on the target system, and
+  removes the target when that is done. The deletions go through the queue, so they survive
+  interruptions; an item the target refuses keeps the target in the list until it is retried or the
+  target is disconnected.
+
 Members of a group always get an account. Users without a value for the account name are not
 provisioned. A user who no longer belongs to a target is removed from its groups and deactivated;
 only a user deleted in Admidio is deleted on the target. Accounts and groups the plugin did not create
@@ -62,6 +74,7 @@ or take over (by `externalId`) are never touched.
 | `provisioning:status` | Targets, queues and last runs; exit code 3 if a target is paused or items need attention |
 | `provisioning:test --target=UUID` | Test the connection |
 | `provisioning:queue --target=UUID [--retry] [--clear --yes]` | Items that need attention; retry or clear |
+| `provisioning:deprovision --target=UUID --yes` | Delete what Admidio created on the target system, then the target |
 
 ## Writing a connector
 
@@ -86,6 +99,19 @@ Tests run with Admidio's suite, from the Admidio root:
 vendor/bin/phpunit plugins/provisioning/tests/Unit
 vendor/bin/phpunit plugins/provisioning/tests/Integration
 ```
+
+### Trying it out without a SCIM service
+
+`tests/Support/scim-mock-server.php` is a small SCIM service for PHP's built-in web server. It is
+what the HTTP tests use, and it is enough to try the plugin in the browser:
+
+```
+SCIM_MOCK_STORE=/tmp/scim.json SCIM_MOCK_TOKEN=secret php -S 127.0.0.1:8089 plugins/provisioning/tests/Support/scim-mock-server.php
+```
+
+Create a SCIM target with the base URL `http://127.0.0.1:8089/scim/v2` and the bearer token `secret`,
+and allow private networks in the plugin settings. `/tmp/scim.json` then shows what was provisioned.
+Never expose the mock server.
 
 ## License
 

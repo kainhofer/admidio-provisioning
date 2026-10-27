@@ -54,7 +54,7 @@ final class ProvisioningManifestTest extends AdmidioTestCase
             $used = array_merge($used, $matches[0]);
         }
         // keys that are built from a prefix and a state
-        foreach (array('STATE_OK', 'STATE_PARTIAL', 'STATE_PAUSED', 'GROUP_SOURCE_MANUAL', 'GROUP_SOURCE_SSO', 'GROUP_SOURCE_CATCHALL') as $suffix) {
+        foreach (array('STATE_OK', 'STATE_PARTIAL', 'STATE_PAUSED', 'STATE_DEPROVISIONING', 'GROUP_SOURCE_MANUAL', 'GROUP_SOURCE_SSO', 'GROUP_SOURCE_CATCHALL') as $suffix) {
             $used[] = 'PLG_PROVISIONING_' . $suffix;
         }
 
