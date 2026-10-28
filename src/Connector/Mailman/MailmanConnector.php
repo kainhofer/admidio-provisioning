@@ -17,7 +17,8 @@ use AdmidioPlugin\Provisioning\Connector\HttpClient;
  * A group name is the address of the list, or its local part when the target names the mail
  * domain. Lists are only created or deleted if the target allows it; otherwise the lists have to
  * exist, and a list that is no longer configured only loses the subscriptions Admidio made.
- * Subscriptions are made pre-verified and pre-approved, without confirmation mail.
+ * Subscriptions are made pre-verified and pre-approved, without confirmation mail, and removed
+ * without goodbye message; members who subscribe or leave on their own get the mails of the list.
  */
 class MailmanConnector extends Connector
 {
@@ -172,8 +173,11 @@ class MailmanConnector extends Connector
             $this->expectList($response, $remoteId, array(200, 201));
         }
 
-        foreach ($remove as $address) {
-            $response = $this->request('DELETE', 'lists/' . rawurlencode($remoteId) . '/member/' . rawurlencode($address));
+        // The mass unsubscription of the roster bypasses the unsubscription workflow, so Mailman
+        // sends neither its goodbye message nor an admin notice. Addresses that are no longer
+        // subscribed are reported as failed, which is what we want; a missing list has no members.
+        if ($remove !== array()) {
+            $response = $this->request('DELETE', 'lists/' . rawurlencode($remoteId) . '/roster/member', array('emails' => array_values($remove)));
             $this->expect($response, array(200, 204, 404));
         }
     }
@@ -215,7 +219,8 @@ class MailmanConnector extends Connector
     }
 
     /**
-     * @param array<string,string>|null $parameters form parameters of the body
+     * @param array<string,string|array<int,string>>|null $parameters form parameters of the body;
+     *        a list is sent as a repeated parameter, as Mailman expects it
      * @param array<string,string> $query
      * @return array{status: int, body: array<string,mixed>|null}
      */
@@ -236,7 +241,13 @@ class MailmanConnector extends Connector
         $body = null;
         if ($parameters !== null) {
             $headers[] = 'Content-Type: application/x-www-form-urlencoded';
-            $body = http_build_query($parameters, '', '&');
+            $pairs = array();
+            foreach ($parameters as $name => $value) {
+                foreach ((array) $value as $item) {
+                    $pairs[] = urlencode((string) $name) . '=' . urlencode((string) $item);
+                }
+            }
+            $body = implode('&', $pairs);
         }
 
         [$status, $responseHeaders, $responseBody] = $this->http->send($method, $url, $headers, $body);

@@ -15,7 +15,7 @@ require_once dirname(__DIR__) . '/Support/autoload.php';
  */
 final class MailmanConnectorTest extends AdmidioTestCase
 {
-    /** @var array<int,array{method: string, url: string, headers: array<int,string>, body: array<string,string>}> */
+    /** @var array<int,array{method: string, url: string, headers: array<int,string>, body: array<string,string>, raw: string}> */
     private array $requests = array();
     /** @var array<int,array{0:int, 1:array, 2:string}> */
     private array $responses = array();
@@ -28,7 +28,7 @@ final class MailmanConnectorTest extends AdmidioTestCase
             false,
             function (string $method, string $url, array $headers, ?string $body): array {
                 parse_str((string) $body, $form);
-                $this->requests[] = array('method' => $method, 'url' => $url, 'headers' => $headers, 'body' => $form);
+                $this->requests[] = array('method' => $method, 'url' => $url, 'headers' => $headers, 'body' => $form, 'raw' => (string) $body);
                 return array_shift($this->responses) ?? array(204, array(), '');
             }
         );
@@ -80,8 +80,9 @@ final class MailmanConnectorTest extends AdmidioTestCase
     {
         $this->respond(201);
         $this->respond(409, array('description' => 'Member already subscribed'));
+        $this->respond(200, array('c@example.org' => true, 'd@example.org' => false));
 
-        $this->connector()->changeMembers('board.lists.example.org', new GroupState('g', 'board'), array('a@example.org', 'b@example.org'), array('c@example.org'));
+        $this->connector()->changeMembers('board.lists.example.org', new GroupState('g', 'board'), array('a@example.org', 'b@example.org'), array('c@example.org', 'd@example.org'));
 
         $this->assertSame('POST', $this->requests[0]['method']);
         $this->assertSame('https://lists.example/3.1/members', $this->requests[0]['url']);
@@ -89,7 +90,10 @@ final class MailmanConnectorTest extends AdmidioTestCase
         $this->assertSame('true', $this->requests[0]['body']['pre_approved']);
         $this->assertSame('false', $this->requests[0]['body']['send_welcome_message']);
         $this->assertSame('DELETE', $this->requests[2]['method']);
-        $this->assertSame('https://lists.example/3.1/lists/board.lists.example.org/member/c%40example.org', $this->requests[2]['url']);
+        // the mass unsubscription sends no goodbye message
+        $this->assertSame('https://lists.example/3.1/lists/board.lists.example.org/roster/member', $this->requests[2]['url']);
+        $this->assertSame('emails=c%40example.org&emails=d%40example.org', $this->requests[2]['raw']);
+        $this->assertCount(3, $this->requests);
     }
 
     public function testTheRosterIsReadPageByPage(): void
