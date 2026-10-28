@@ -2,6 +2,7 @@
 namespace AdmidioPlugin\Provisioning\Presenter;
 
 use Admidio\Infrastructure\Exception;
+use Admidio\Infrastructure\Language;
 use Admidio\Infrastructure\Utils\SecurityUtils;
 use Admidio\UI\Presenter\FormPresenter;
 use AdmidioPlugin\Provisioning\Entity\Group;
@@ -76,7 +77,7 @@ class GroupPresenter extends ProvisioningPresenter
                 ? $gL10n->get('PLG_PROVISIONING_GROUP_STATE_DELETE')
                 : ((string) $group['pvg_remote_id'] === '' ? $gL10n->get('PLG_PROVISIONING_GROUP_STATE_NEW') : $gL10n->get('PLG_PROVISIONING_GROUP_STATE_SYNCED'));
             if ((string) $group['pvg_last_error'] !== '') {
-                $stateText .= '<br><span class="text-danger">' . SecurityUtils::encodeHTML((string) $group['pvg_last_error']) . '</span>';
+                $stateText .= '<br><span class="text-danger">' . SecurityUtils::encodeHTML(Language::translateIfTranslationStrId((string) $group['pvg_last_error'])) . '</span>';
             }
 
             $rows[] = array(

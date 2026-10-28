@@ -28,6 +28,8 @@ class NextcloudConnector extends Connector
     private const OCS_USER_MISSING = 103;
     /** A field the backend of the user does not let anybody change. */
     private const OCS_FIELD_NOT_EDITABLE = 113;
+    /** Message of the 403 for a change that needs a recent password confirmation. */
+    private const PASSWORD_CONFIRMATION_REQUIRED = 'Password confirmation is required';
 
     /** Attributes that are changed with PUT /users/{id}, by the key of the API. */
     private const EDITABLE_KEYS = array(
@@ -323,6 +325,10 @@ class NextcloudConnector extends Connector
         $meta = is_array($decoded) ? (array) ($decoded['ocs']['meta'] ?? array()) : array();
         $message = (string) ($meta['message'] ?? '');
 
+        if ($status === 403 && $message === self::PASSWORD_CONFIRMATION_REQUIRED) {
+            // stored as translation ID, translated where the error is shown
+            throw ConnectorError::target('PLG_PROVISIONING_NEXTCLOUD_PASSWORD_CONFIRMATION');
+        }
         HttpClient::raiseForStatus($status, $responseHeaders, $message);
 
         return array(

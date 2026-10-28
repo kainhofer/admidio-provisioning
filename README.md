@@ -72,7 +72,17 @@ attention, and offers *Synchronize now*, *Verify now*, *Test connection* and *Re
 * **Nextcloud**: the account name is the Nextcloud user ID and cannot change after the account was
   created. An existing user with that ID is taken over. New users get no password; Nextcloud mails
   them a link to set one, so they need an email address. Authenticate with an app password of an
-  administrator.
+  administrator. Since Nextcloud 35, changes to users, groups and memberships have to be confirmed
+  with a password. An app password no longer suffices for this by default, but can be allowed from
+  certain IP addresses: add the address of the Admidio server to
+  `allowed_no_password_confirmation_ranges` in Nextcloud's `config.php` (behind a reverse proxy, the
+  proxy also has to be in `trusted_proxies`, or Nextcloud sees the address of the proxy):
+
+  ```
+  'allowed_no_password_confirmation_ranges' => ['192.0.2.10/32'],
+  ```
+
+  Alternatively, use the password of the account instead of an app password (not recommended).
 * **Mailman 3**: the account name defaults to the email address, so users without one are not
   subscribed. A group name is the address of the list, or its local part together with the mail
   domain of the target. Lists are created and deleted only if the target allows it; otherwise a

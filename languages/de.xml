@@ -86,6 +86,7 @@
   <string name="PLG_PROVISIONING_NEXTCLOUD_APP_PASSWORD_DESC">Ein App-Passwort des Administratorkontos, angelegt in den Sicherheitseinstellungen von Nextcloud.</string>
   <string name="PLG_PROVISIONING_NEXTCLOUD_BASE_URL">Nextcloud-URL</string>
   <string name="PLG_PROVISIONING_NEXTCLOUD_BASE_URL_DESC">Die Adresse des Nextcloud-Servers, z. B. https://cloud.example.org. Neue Benutzer erhalten von Nextcloud eine E-Mail zum Setzen ihres Passworts und brauchen daher eine E-Mail-Adresse.</string>
+  <string name="PLG_PROVISIONING_NEXTCLOUD_PASSWORD_CONFIRMATION">Seit Nextcloud 35 reicht ein App-Passwort für Änderungen nicht mehr aus. Nextcloud erwartet standardmäßig eine Bestätigung mit dem echten Passwort. Erlaube die IP des Admidio-Servers in allowed_no_password_confirmation_ranges in der config.php von Nextcloud.</string>
   <string name="PLG_PROVISIONING_NO_ATTENTION">Nichts erfordert Aufmerksamkeit.</string>
   <string name="PLG_PROVISIONING_NO_CRON">(kein Cron-Lauf in den letzten 25 Stunden)</string>
   <string name="PLG_PROVISIONING_NO_CRON_WARNING">In den letzten 25 Stunden wurde kein Cron-Lauf festgestellt. Ohne Cron werden Beginn und Ende von Mitgliedschaften erst wirksam, wenn jemand Admidio aufruft. Führe „admidio provisioning:sync“ stündlich aus.</string>

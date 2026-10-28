@@ -181,6 +181,19 @@ final class NextcloudConnectorTest extends AdmidioTestCase
         }
     }
 
+    public function testAMissingPasswordConfirmationExplainsTheNextcloudSetting(): void
+    {
+        $this->respond(403, 403, null, 'Password confirmation is required');
+
+        try {
+            $this->connector()->deactivateAccount('jdoe', $this->account());
+            $this->fail('No error was raised.');
+        } catch (ConnectorError $error) {
+            $this->assertSame(ConnectorError::TARGET, $error->kind);
+            $this->assertSame('PLG_PROVISIONING_NEXTCLOUD_PASSWORD_CONFIRMATION', $error->getMessage());
+        }
+    }
+
     public function testVerificationComparesTheEnabledState(): void
     {
         $this->respond(200, 200, array('id' => 'jdoe', 'enabled' => false));

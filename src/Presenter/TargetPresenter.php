@@ -395,7 +395,7 @@ class TargetPresenter extends ProvisioningPresenter
                     $gL10n->get($item['pvq_type'] === Queue::TYPE_GROUP ? 'PLG_PROVISIONING_GROUP' : 'PLG_PROVISIONING_ACCOUNT'),
                     $name,
                     (string) (int) $item['pvq_attempts'],
-                    SecurityUtils::encodeHTML((string) $item['pvq_last_error'])
+                    SecurityUtils::encodeHTML(Language::translateIfTranslationStrId((string) $item['pvq_last_error']))
                 ),
                 'retryUrl' => $this->pageUrl('index.php', array('mode' => 'retry', 'uuid' => $targetUuid, 'item' => (int) $item['pvq_id']))
             );

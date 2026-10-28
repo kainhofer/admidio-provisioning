@@ -159,7 +159,7 @@ final class ProvisioningCli
                 'key' => (string) $item['pvq_key'],
                 'name' => (string) ($item['pvg_name'] ?? ''),
                 'attempts' => (int) $item['pvq_attempts'],
-                'error' => (string) $item['pvq_last_error']
+                'error' => Language::translateIfTranslationStrId((string) $item['pvq_last_error'])
             );
         }
         CliApplication::writeRows($rows, CliApplication::optionString($options, 'format', 'table'), $options);
