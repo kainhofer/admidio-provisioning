@@ -30,12 +30,19 @@ class TargetPresenter extends ProvisioningPresenter
         $this->setHtmlID('adm_provisioning_targets');
         $this->setHeadline($gL10n->get('PLG_PROVISIONING_TARGETS'));
 
+        $this->addPageFunctionsMenuItem(
+            'menu_item_provisioning_add',
+            $gL10n->get('SYS_CREATE_VAR', array($gL10n->get('PLG_PROVISIONING_TARGET'))),
+            '#',
+            'bi-plus-circle-fill'
+        );
         foreach (Connectors::all() as $type => $class) {
             $this->addPageFunctionsMenuItem(
                 'menu_item_provisioning_add_' . $type,
-                $gL10n->get('SYS_CREATE_VAR', array($gL10n->get($class::getLabel()))),
+                $gL10n->get($class::getLabel()),
                 $this->pageUrl('index.php', array('mode' => 'edit', 'connector' => $type)),
-                'bi-plus-circle-fill'
+                'bi-plus-circle-fill',
+                'menu_item_provisioning_add'
             );
         }
         ChangelogService::displayHistoryButton($this, 'provisioning', array('provisioning_targets', 'provisioning_groups'));
@@ -329,6 +336,8 @@ class TargetPresenter extends ProvisioningPresenter
             $this->pageUrl('index.php', array('mode' => 'edit', 'uuid' => $targetUuid)), 'bi-pencil-square');
         $this->addPageFunctionsMenuItem('menu_item_provisioning_groups', $gL10n->get('PLG_PROVISIONING_GROUPS'),
             $this->pageUrl('groups.php', array('target_uuid' => $targetUuid)), 'bi-people');
+        ChangelogService::displayHistoryButton($this, 'provisioning', 'provisioning_targets', true,
+            array('uuid' => $targetUuid));
 
         $status = new TargetStatus($gDb);
         $queue = new Queue($gDb);
