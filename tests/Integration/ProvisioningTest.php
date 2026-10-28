@@ -396,6 +396,78 @@ final class ProvisioningTest extends ProvisioningDatabaseTestCase
         )->fetchColumn());
     }
 
+    /**
+     * An account and a group that exist on the target before the first sync; the group has the
+     * account and an outsider as members.
+     *
+     * @return array{0: Target, 1: array<string,mixed>, 2: array<string,mixed>, 3: array<string,mixed>} target, role, existing user, new user
+     */
+    private function targetWithExistingAccountAndGroup(string $name): array
+    {
+        [$role, $existing] = $this->member($name . '-existing');
+        [, $new] = $this->member($name . '-new', DATE_NOW, DATE_MAX, $role);
+        $target = $this->createTarget(array($role['rol_id']));
+        $group = $this->createGroup($target, 'Existing ' . $name, array($role['rol_id']));
+
+        MemoryConnector::$accounts['old-account'] = array('key' => $existing['usr_uuid'], 'name' => 'existing', 'active' => true, 'attributes' => array());
+        MemoryConnector::$groups['old-group'] = array(
+            'key' => (string) $group->getValue('pvg_uuid'),
+            'name' => 'Existing ' . $name,
+            'members' => array('old-account' => true, 'outsider' => true)
+        );
+        return array($target, $role, $existing, $new);
+    }
+
+    public function testDeprovisioningKeepsWhatExistedBeforeAndTakesBackOnlyWhatAdmidioAdded(): void
+    {
+        [$target, , $existing, $new] = $this->targetWithExistingAccountAndGroup('takeover');
+        $this->sync($target);
+        $added = MemoryConnector::accountByKey($new['usr_uuid'])['remoteId'];
+        $this->assertSame(array('old-account', 'outsider', $added), array_keys(MemoryConnector::$groups['old-group']['members']));
+
+        (new TargetService($this->getDatabase()))->deprovision($target);
+        $result = $this->sync($target);
+
+        $this->assertSame('PLG_PROVISIONING_DEPROVISIONED', $result['message']);
+        $this->assertSame(array('old-account', 'outsider'), array_keys(MemoryConnector::$groups['old-group']['members']));
+        $this->assertNotNull(MemoryConnector::accountByKey($existing['usr_uuid']));
+        $this->assertNull(MemoryConnector::accountByKey($new['usr_uuid']));
+        $this->assertNotContains('deleteGroup:old-group', MemoryConnector::$calls);
+        $this->assertNotContains('deleteAccount:old-account', MemoryConnector::$calls);
+    }
+
+    public function testAMemberFromBeforeTheTakeoverStaysInTheGroup(): void
+    {
+        [$target, , $existing] = $this->targetWithExistingAccountAndGroup('preexisting');
+        $this->sync($target);
+
+        $this->getDatabase()->queryPrepared(
+            'UPDATE ' . TBL_MEMBERS . ' SET mem_end = ? WHERE mem_usr_id = ?',
+            array(self::yesterday(), $existing['usr_id'])
+        );
+        $this->sync($target);
+
+        // deactivated, as anybody who leaves the target, but still in the group it was in before
+        $this->assertFalse(MemoryConnector::$accounts['old-account']['active']);
+        $this->assertArrayHasKey('old-account', MemoryConnector::$groups['old-group']['members']);
+    }
+
+    public function testADeletedUserKeepsTheAccountThatExistedBefore(): void
+    {
+        [$target, , $existing] = $this->targetWithExistingAccountAndGroup('deleted-existing');
+        $this->sync($target);
+
+        $this->fixture->deleteUser($existing['usr_id']);
+        $this->sync($target);
+
+        $this->assertTrue(MemoryConnector::$accounts['old-account']['active']);
+        $this->assertNotContains('deleteAccount:old-account', MemoryConnector::$calls);
+        $this->assertSame(0, (int) $this->getDatabase()->queryPrepared(
+            'SELECT COUNT(*) FROM ' . ProvisioningTables::accounts() . ' WHERE pva_usr_uuid = ?',
+            array($existing['usr_uuid'])
+        )->fetchColumn());
+    }
+
     public function testADeprovisioningTargetWaitsForItemsThatFailedAndCannotBeEdited(): void
     {
         [$role] = $this->member('deprovision-fail');

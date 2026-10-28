@@ -55,6 +55,7 @@ CREATE TABLE %PREFIX%_provisioning_groups
     pvg_roles                   text             NULL,
     pvg_state                   varchar(10)      NOT NULL DEFAULT 'active',
     pvg_remote_id               varchar(255)     NULL,
+    pvg_created                 boolean          NOT NULL DEFAULT false,
     pvg_hash                    char(64)         NULL,
     pvg_last_sync               timestamp        NULL DEFAULT NULL,
     pvg_last_error              text             NULL,
@@ -78,6 +79,7 @@ CREATE TABLE %PREFIX%_provisioning_accounts
     pva_usr_id                  integer unsigned NOT NULL,
     pva_usr_uuid                varchar(36)      NOT NULL,
     pva_remote_id               varchar(255)     NULL,
+    pva_created                 boolean          NOT NULL DEFAULT false,
     pva_member_key              varchar(255)     NULL,
     pva_hash                    char(64)         NULL,
     pva_active                  boolean          NOT NULL DEFAULT false,
@@ -97,6 +99,7 @@ CREATE TABLE %PREFIX%_provisioning_members
 (
     pvm_pvg_id                  integer unsigned NOT NULL,
     pvm_pva_id                  integer unsigned NOT NULL,
+    pvm_preexisting             boolean          NOT NULL DEFAULT false,
     PRIMARY KEY (pvm_pvg_id, pvm_pva_id)
 )
 ENGINE = InnoDB

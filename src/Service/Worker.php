@@ -176,12 +176,15 @@ class Worker
             return;
         }
 
-        // Out of the target: leave every group first, then deactivate or delete.
+        // Out of the target: leave every group first, then deactivate or delete. Only an account
+        // that Admidio created is deleted; one that existed before keeps everything but the
+        // memberships Admidio added (a deleted user has no data left to deactivate it with).
         $this->removeFromAllGroups($mapping);
         $remoteId = (string) $mapping['pva_remote_id'];
+        $created = (bool) $mapping['pva_created'];
 
         if ($desired['state'] === 'deleted') {
-            if ($capabilities['accounts'] && $remoteId !== '') {
+            if ($capabilities['accounts'] && $remoteId !== '' && $created) {
                 $this->connector->deleteAccount($remoteId);
             }
             $this->db->queryPrepared(
@@ -193,9 +196,9 @@ class Worker
 
         $account = $desired['account'];
         if ($capabilities['accounts'] && !$capabilities['deactivate']) {
-            // A target that cannot deactivate accounts loses the account instead. Should the user
-            // come back, a new account is created.
-            if ($remoteId !== '') {
+            // A target that cannot deactivate accounts loses the account instead, if Admidio
+            // created it. Should the user come back, a new account is created or taken over.
+            if ($remoteId !== '' && $created) {
                 $this->connector->deleteAccount($remoteId);
             }
             $this->db->queryPrepared(
@@ -227,6 +230,8 @@ class Worker
     private function provisionAccount(Account $account, int $userId, ?array $mapping, array $capabilities): void
     {
         $remoteId = $mapping === null ? '' : (string) $mapping['pva_remote_id'];
+        // null: unchanged, otherwise whether Admidio created the account or took over an existing one
+        $created = null;
 
         if ($capabilities['accounts']) {
             if ($remoteId !== '' && $mapping !== null && (string) $mapping['pva_hash'] !== $account->hash()) {
@@ -242,7 +247,8 @@ class Worker
             }
             if ($remoteId === '') {
                 $remoteId = (string) $this->connector->findAccount($account);
-                if ($remoteId === '') {
+                $created = $remoteId === '';
+                if ($created) {
                     $remoteId = $this->connector->createAccount($account);
                 } else {
                     $this->connector->updateAccount($remoteId, $account);
@@ -252,7 +258,7 @@ class Worker
 
         $memberKey = $this->connector->getMemberKey($remoteId === '' ? null : $remoteId, $account);
         $previousKey = $mapping === null ? '' : (string) $mapping['pva_member_key'];
-        $accountId = $this->saveAccountMapping($mapping, $userId, $remoteId, $memberKey, $account);
+        $accountId = $this->saveAccountMapping($mapping, $userId, $remoteId, $memberKey, $account, $created);
 
         // Targets whose members are email addresses: a changed address changes the membership.
         if ($previousKey !== '' && $previousKey !== $memberKey) {
@@ -264,7 +270,8 @@ class Worker
     }
 
     /**
-     * Remove an account from all groups it was provisioned into.
+     * Remove an account from all groups it was provisioned into, except those it had been a member
+     * of before Admidio took the group over.
      *
      * @param array<string,mixed> $mapping
      */
@@ -274,7 +281,7 @@ class Worker
         $memberKey = (string) $mapping['pva_member_key'];
 
         foreach ($this->groupsOfAccount($accountId) as $group) {
-            if ($memberKey !== '' && (string) $group['pvg_remote_id'] !== '') {
+            if ($memberKey !== '' && (string) $group['pvg_remote_id'] !== '' && !(bool) $group['pvm_preexisting']) {
                 $remaining = array_values(array_diff($this->memberKeys((int) $group['pvg_id']), array($memberKey)));
                 $state = new GroupState((string) $group['pvg_uuid'], (string) $group['pvg_name'], $remaining);
                 try {
@@ -310,13 +317,23 @@ class Worker
         $remoteId = (string) $group['pvg_remote_id'];
 
         if ($group['pvg_state'] === Group::STATE_DELETE) {
-            if ($remoteId !== '' && ($this->connector->getCapabilities()['deleteGroups'] ?? true)) {
+            // Only a group that Admidio created is deleted. One that existed before stays on the
+            // target, and only the members Admidio added to it are taken back.
+            if ($remoteId !== '' && (bool) $group['pvg_created'] && ($this->connector->getCapabilities()['deleteGroups'] ?? true)) {
                 $this->connector->deleteGroup($remoteId);
             } elseif ($remoteId !== '') {
-                // the group stays on the target; only what Admidio added to it is taken back
-                $stored = array_values(array_filter($this->storedMembers((int) $group['pvg_id']), static fn(string $key): bool => $key !== ''));
-                if ($stored !== array()) {
-                    $this->connector->changeMembers($remoteId, new GroupState($groupUuid, (string) $group['pvg_name']), array(), $stored);
+                $added = array_values(array_filter(
+                    array_diff_key($this->storedMembers((int) $group['pvg_id']), $this->preexistingMembers((int) $group['pvg_id'])),
+                    static fn(string $key): bool => $key !== ''
+                ));
+                if ($added !== array()) {
+                    try {
+                        $this->connector->changeMembers($remoteId, new GroupState($groupUuid, (string) $group['pvg_name']), array(), $added);
+                    } catch (ConnectorError $error) {
+                        if ($error->kind !== ConnectorError::MISSING) {
+                            throw $error;
+                        }
+                    }
                 }
             }
             $this->db->queryPrepared('DELETE FROM ' . ProvisioningTables::groups() . ' WHERE pvg_id = ?', array((int) $group['pvg_id']));
@@ -342,26 +359,30 @@ class Worker
 
         $stored = $this->storedMembers($groupId);
         $state = new GroupState($groupUuid, (string) $group['pvg_name'], array_values($desiredAccounts));
+        // accounts that were members of a group before Admidio took it over: never removed by Admidio
+        $preexisting = $this->preexistingMembers($groupId);
 
         try {
             if ($remoteId === '') {
                 $remoteId = (string) $this->connector->findGroup($state);
-                if ($remoteId === '') {
+                $created = $remoteId === '';
+                if ($created) {
                     $remoteId = $this->connector->createGroup($state);
                 } else {
                     $this->connector->updateGroup($remoteId, $state);
+                    $preexisting += $this->membersOnTarget($remoteId, $desiredAccounts);
                 }
                 $this->db->queryPrepared(
-                    'UPDATE ' . ProvisioningTables::groups() . ' SET pvg_remote_id = ? WHERE pvg_id = ?',
-                    array($remoteId, $groupId)
+                    'UPDATE ' . ProvisioningTables::groups() . ' SET pvg_remote_id = ?, pvg_created = ? WHERE pvg_id = ?',
+                    array($remoteId, $created, $groupId)
                 );
             } elseif ((string) $group['pvg_hash'] !== GroupState::hashOf((string) $group['pvg_name'], $this->storedMemberUuids($groupId))) {
                 // the name differs from the one last sent (or nothing was sent successfully yet)
                 $this->connector->updateGroup($remoteId, $state);
             }
 
-            $add = array_values(array_diff_key($desiredAccounts, $stored));
-            $remove = array_values(array_diff_key($stored, $desiredAccounts));
+            $add = array_values(array_diff_key($desiredAccounts, $stored, $preexisting));
+            $remove = array_values(array_diff_key($stored, $desiredAccounts, $preexisting));
             $this->connector->changeMembers($remoteId, $state, $add, $remove);
         } catch (ConnectorError $error) {
             if ($error->kind !== ConnectorError::MISSING || isset($this->deferredGroups[$itemId])) {
@@ -369,8 +390,8 @@ class Worker
             }
             // deleted on the target: forget it, the next attempt looks it up or creates it again
             $this->db->queryPrepared(
-                'UPDATE ' . ProvisioningTables::groups() . ' SET pvg_remote_id = NULL, pvg_hash = NULL WHERE pvg_id = ?',
-                array($groupId)
+                'UPDATE ' . ProvisioningTables::groups() . ' SET pvg_remote_id = NULL, pvg_created = ?, pvg_hash = NULL WHERE pvg_id = ?',
+                array(false, $groupId)
             );
             $this->db->queryPrepared('DELETE FROM ' . ProvisioningTables::members() . ' WHERE pvm_pvg_id = ?', array($groupId));
             $this->deferredGroups[$itemId] = true;
@@ -380,8 +401,8 @@ class Worker
 
         foreach (array_keys(array_diff_key($desiredAccounts, $stored)) as $accountId) {
             $this->db->queryPrepared(
-                'INSERT INTO ' . ProvisioningTables::members() . ' (pvm_pvg_id, pvm_pva_id) VALUES (?, ?)',
-                array($groupId, $accountId)
+                'INSERT INTO ' . ProvisioningTables::members() . ' (pvm_pvg_id, pvm_pva_id, pvm_preexisting) VALUES (?, ?, ?)',
+                array($groupId, $accountId, isset($preexisting[$accountId]))
             );
         }
         foreach (array_keys(array_diff_key($stored, $desiredAccounts)) as $accountId) {
@@ -429,23 +450,26 @@ class Worker
 
     /**
      * @param array<string,mixed>|null $mapping
+     * @param bool|null $created Whether Admidio created the account on the target; null keeps the stored value.
      * @return int The ID of the mapping.
      */
-    private function saveAccountMapping(?array $mapping, int $userId, string $remoteId, string $memberKey, Account $account): int
+    private function saveAccountMapping(?array $mapping, int $userId, string $remoteId, string $memberKey, Account $account, ?bool $created = null): int
     {
+        $created ??= $mapping !== null && (bool) $mapping['pva_created'];
         $values = array(
             $remoteId === '' ? null : $remoteId,
             $memberKey === '' ? null : $memberKey,
             $account->hash(),
             $account->active,
+            $created,
             ProvisioningPlugin::now()
         );
 
         if ($mapping === null) {
             $this->db->queryPrepared(
                 'INSERT INTO ' . ProvisioningTables::accounts() . '
-                        (pva_remote_id, pva_member_key, pva_hash, pva_active, pva_last_sync, pva_pvt_id, pva_usr_id, pva_usr_uuid)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                        (pva_remote_id, pva_member_key, pva_hash, pva_active, pva_created, pva_last_sync, pva_pvt_id, pva_usr_id, pva_usr_uuid)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 array_merge($values, array($this->target->getId(), $userId, $account->key))
             );
             return (int) $this->db->lastInsertId();
@@ -453,7 +477,7 @@ class Worker
 
         $this->db->queryPrepared(
             'UPDATE ' . ProvisioningTables::accounts() . '
-                SET pva_remote_id = ?, pva_member_key = ?, pva_hash = ?, pva_active = ?, pva_last_sync = ?,
+                SET pva_remote_id = ?, pva_member_key = ?, pva_hash = ?, pva_active = ?, pva_created = ?, pva_last_sync = ?,
                     pva_last_error = NULL, pva_usr_id = ?
               WHERE pva_id = ?',
             array_merge($values, array($userId > 0 ? $userId : (int) $mapping['pva_usr_id'], (int) $mapping['pva_id']))
@@ -499,6 +523,41 @@ class Worker
     }
 
     /**
+     * @return array<int,bool> The accounts that were members before Admidio took the group over, by account ID.
+     */
+    private function preexistingMembers(int $groupId): array
+    {
+        return array_fill_keys(array_map('intval', $this->db->queryPrepared(
+            'SELECT pvm_pva_id FROM ' . ProvisioningTables::members() . ' WHERE pvm_pvg_id = ? AND pvm_preexisting = ?',
+            array($groupId, true)
+        )->fetchAll(\PDO::FETCH_COLUMN)), true);
+    }
+
+    /**
+     * Which of the given accounts a group that is being taken over has as members already. A target
+     * that cannot list the members of a group is treated as having none.
+     *
+     * @param array<int,string> $memberKeys Member keys by account ID
+     * @return array<int,bool> By account ID
+     */
+    private function membersOnTarget(string $remoteId, array $memberKeys): array
+    {
+        $remote = $this->connector->readGroupMembers($remoteId);
+        if ($remote === null) {
+            return array();
+        }
+        $remote = array_fill_keys(array_map('mb_strtolower', $remote), true);
+
+        $members = array();
+        foreach ($memberKeys as $accountId => $key) {
+            if (isset($remote[mb_strtolower($key)])) {
+                $members[$accountId] = true;
+            }
+        }
+        return $members;
+    }
+
+    /**
      * @return array<int,string>
      */
     private function storedMemberUuids(int $groupId): array
@@ -525,7 +584,7 @@ class Worker
     private function groupsOfAccount(int $accountId): array
     {
         return $this->db->getArrayFromSql(
-            'SELECT pvg_id, pvg_uuid, pvg_name, pvg_remote_id FROM ' . ProvisioningTables::groups() . '
+            'SELECT pvg_id, pvg_uuid, pvg_name, pvg_remote_id, pvm_preexisting FROM ' . ProvisioningTables::groups() . '
               INNER JOIN ' . ProvisioningTables::members() . ' ON pvm_pvg_id = pvg_id
               WHERE pvm_pva_id = ?',
             array($accountId)

@@ -291,11 +291,16 @@ class Scheduler
             if ($stored === $remote) {
                 continue;
             }
+            // members from before the takeover stay marked as such
+            $preexisting = array_fill_keys(array_map('intval', $this->db->queryPrepared(
+                'SELECT pvm_pva_id FROM ' . ProvisioningTables::members() . ' WHERE pvm_pvg_id = ? AND pvm_preexisting = ?',
+                array($groupId, true)
+            )->fetchAll(\PDO::FETCH_COLUMN)), true);
             $this->db->queryPrepared('DELETE FROM ' . ProvisioningTables::members() . ' WHERE pvm_pvg_id = ?', array($groupId));
             foreach (array_keys($remoteAccounts) as $accountId) {
                 $this->db->queryPrepared(
-                    'INSERT INTO ' . ProvisioningTables::members() . ' (pvm_pvg_id, pvm_pva_id) VALUES (?, ?)',
-                    array($groupId, $accountId)
+                    'INSERT INTO ' . ProvisioningTables::members() . ' (pvm_pvg_id, pvm_pva_id, pvm_preexisting) VALUES (?, ?, ?)',
+                    array($groupId, $accountId, isset($preexisting[$accountId]))
                 );
             }
             $this->db->queryPrepared(

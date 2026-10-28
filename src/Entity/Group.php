@@ -47,7 +47,7 @@ class Group extends Entity
     {
         return array_merge(
             parent::getIgnoredLogColumns(),
-            array('pvg_key', 'pvg_remote_id', 'pvg_hash', 'pvg_last_sync', 'pvg_last_error')
+            array('pvg_key', 'pvg_remote_id', 'pvg_created', 'pvg_hash', 'pvg_last_sync', 'pvg_last_error')
         );
     }
 

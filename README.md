@@ -96,8 +96,9 @@ credentials in the request body or as HTTP Basic credentials.
 ### Removing a target
 
 * **Disconnect** removes the target in Admidio. Its accounts and groups on the target system remain.
-* **Deprovision** deletes the groups and then the accounts Admidio created on the target system, and
-  removes the target when that is done. The deletions go through the queue, so they survive
+* **Deprovision** deletes the groups and then the accounts Admidio created on the target system
+  (those it took over only lose the memberships Admidio added), and removes the target when that is
+  done. The deletions go through the queue, so they survive
   interruptions; an item the target refuses keeps the target in the list until it is retried or the
   target is disconnected.
 
@@ -105,6 +106,11 @@ Members of a group always get an account. Users without a value for the account 
 provisioned. A user who no longer belongs to a target is removed from its groups and deactivated;
 only a user deleted in Admidio is deleted on the target. Accounts and groups the plugin did not create
 or take over (by `externalId`) are never touched.
+
+Admidio only deletes what it created. An account or group that already existed on the target and was
+taken over is never deleted, neither by deprovisioning nor when the user is deleted in Admidio; only
+the memberships Admidio added are taken back. Members a group had before it was taken over are never
+removed by Admidio.
 
 ## Command line
 
