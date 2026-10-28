@@ -13,6 +13,7 @@ use AdmidioPlugin\Provisioning\Connector\HttpClient;
  * The account name is the Nextcloud user ID, which never changes after the account was created;
  * an existing user with that ID is taken over. Nextcloud has nothing like a SCIM externalId. New
  * users get no password: Nextcloud sends them a mail to set one, so they need an email address.
+ * Phone numbers have to be international (+43 ...) unless Nextcloud has a default_phone_region.
  * Groups get their name as group ID and display name; a renamed group keeps its ID and gets the
  * new display name.
  *
@@ -25,6 +26,8 @@ class NextcloudConnector extends Connector
     private const OCS_OK = array(100, 200);
     private const OCS_GROUP_MISSING = 102;
     private const OCS_USER_MISSING = 103;
+    /** A field the backend of the user does not let anybody change. */
+    private const OCS_FIELD_NOT_EDITABLE = 113;
 
     /** Attributes that are changed with PUT /users/{id}, by the key of the API. */
     private const EDITABLE_KEYS = array(
@@ -34,6 +37,8 @@ class NextcloudConnector extends Connector
 
     protected HttpClient $http;
     private string $baseUrl;
+    /** @var array<string,string> Display names of the groups findGroup() found, by group ID. */
+    private array $foundDisplayNames = array();
 
     public function __construct(array $config, array $secrets, bool $allowPrivateNetwork = false, ?callable $transport = null)
     {
@@ -142,12 +147,18 @@ class NextcloudConnector extends Connector
 
     /**
      * Change only what differs from the current state of the user.
+     *
+     * A field the user's backend does not let anybody change (OCS 113 - for example the display name
+     * of a user that a SAML login created, which comes from the SAML attributes) is left to that
+     * backend. A value Nextcloud rejects does not stop the other fields and the enabled state; the
+     * rejected fields are reported together at the end.
      */
     public function updateAccount(string $remoteId, Account $account): void
     {
         $response = $this->request('GET', 'users/' . rawurlencode($remoteId));
         $this->expect($response);
         $current = (array) $response['data'];
+        $rejected = array();
 
         foreach ($account->attributes as $key => $value) {
             if (!in_array($key, self::EDITABLE_KEYS, true)) {
@@ -157,12 +168,28 @@ class NextcloudConnector extends Connector
             if ($currentValue === $value) {
                 continue;
             }
-            $this->expect($this->request('PUT', 'users/' . rawurlencode($remoteId), array('key' => $key, 'value' => $value)));
+
+            $response = $this->request('PUT', 'users/' . rawurlencode($remoteId), array('key' => $key, 'value' => $value));
+            if ($response['code'] === self::OCS_FIELD_NOT_EDITABLE) {
+                continue;
+            }
+            try {
+                $this->expect($response);
+            } catch (ConnectorError $error) {
+                if ($error->kind !== ConnectorError::INVALID) {
+                    throw $error;
+                }
+                $rejected[] = $key . ' (' . ($response['message'] !== '' ? $response['message'] : $response['code']) . ')';
+            }
         }
 
         $enabled = (bool) ($current['enabled'] ?? true);
         if ($enabled !== $account->active) {
             $this->expect($this->request('PUT', 'users/' . rawurlencode($remoteId) . '/' . ($account->active ? 'enable' : 'disable')));
+        }
+
+        if ($rejected !== array()) {
+            throw ConnectorError::invalid('Nextcloud rejected ' . implode(', ', $rejected) . '.');
         }
     }
 
@@ -188,6 +215,7 @@ class NextcloudConnector extends Connector
         foreach ((array) ($response['data']['groups'] ?? array()) as $candidate) {
             $id = (string) ($candidate['id'] ?? '');
             if (strcasecmp($id, $group->name) === 0 || strcasecmp((string) ($candidate['displayname'] ?? ''), $group->name) === 0) {
+                $this->foundDisplayNames[$id] = (string) ($candidate['displayname'] ?? '');
                 return $id;
             }
         }
@@ -205,8 +233,15 @@ class NextcloudConnector extends Connector
         return $group->name;
     }
 
+    /**
+     * A group that findGroup() has just found with the right display name is left alone: changing a
+     * group is one of the slower requests of Nextcloud.
+     */
     public function updateGroup(string $remoteId, GroupState $group): void
     {
+        if (($this->foundDisplayNames[$remoteId] ?? null) === $group->name) {
+            return;
+        }
         $this->expect($this->request('PUT', 'groups/' . rawurlencode($remoteId), array('key' => 'displayname', 'value' => $group->name)));
     }
 

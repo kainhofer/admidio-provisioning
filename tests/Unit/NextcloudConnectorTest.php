@@ -120,6 +120,31 @@ final class NextcloudConnectorTest extends AdmidioTestCase
         $this->assertStringContainsString('groups/details?search=Board', $this->requests[0]['url']);
     }
 
+    public function testAFoundGroupWithTheRightDisplayNameIsNotChanged(): void
+    {
+        $this->respond(200, 200, array('groups' => array(array('id' => 'Board', 'displayname' => 'Board'))));
+        $connector = $this->connector();
+        $group = new GroupState('g-1', 'Board');
+
+        $connector->updateGroup((string) $connector->findGroup($group), $group);
+
+        $this->assertCount(1, $this->requests);
+    }
+
+    public function testAFoundGroupWithAnotherDisplayNameGetsTheName(): void
+    {
+        $this->respond(200, 200, array('groups' => array(array('id' => 'board', 'displayname' => 'board'))));
+        $connector = $this->connector();
+        $group = new GroupState('g-1', 'Board');
+
+        $connector->updateGroup((string) $connector->findGroup($group), $group);
+
+        $this->assertCount(2, $this->requests);
+        $this->assertSame('PUT', $this->requests[1]['method']);
+        $this->assertSame('https://cloud.example/ocs/v2.php/cloud/groups/board', $this->requests[1]['url']);
+        $this->assertSame(array('key' => 'displayname', 'value' => 'Board'), $this->requests[1]['body']);
+    }
+
     public function testMembersAreAddedAndRemovedPerUser(): void
     {
         $this->connector()->changeMembers('Board', new GroupState('g-1', 'Board'), array('jdoe'), array('max'));
@@ -171,5 +196,37 @@ final class NextcloudConnectorTest extends AdmidioTestCase
         $this->respond(200, 200, array('users' => array('jdoe', 'max')));
 
         $this->assertSame(array('jdoe', 'max'), $this->connector()->readGroupMembers('Board'));
+    }
+
+    public function testAFieldTheBackendManagesIsLeftAlone(): void
+    {
+        // a user created by a SAML login: the display name comes from SAML
+        $this->respond(200, 200, array('displayname' => 'Schmidt, Paul', 'email' => 'old@example.org', 'enabled' => true));
+        $this->respond(400, 113);
+
+        $this->connector()->updateAccount('admin', new Account('uuid-1', 'admin', '', true,
+            array('displayname' => 'Paul Schmidt', 'email' => 'paul@example.org')));
+
+        $this->assertCount(3, $this->requests);
+        $this->assertSame(array('key' => 'email', 'value' => 'paul@example.org'), $this->requests[2]['body']);
+    }
+
+    public function testARejectedValueDoesNotStopTheOtherFields(): void
+    {
+        $this->respond(200, 200, array('displayname' => 'Old', 'phone' => '', 'enabled' => true));
+        $this->respond(400, 101, null, 'Invalid phone');
+
+        try {
+            $this->connector()->updateAccount('demo', new Account('uuid-1', 'demo', '', false,
+                array('phone' => '030-85858585', 'displayname' => 'User Demo')));
+            $this->fail('The rejected phone number was not reported.');
+        } catch (ConnectorError $error) {
+            $this->assertSame(ConnectorError::INVALID, $error->kind);
+            $this->assertStringContainsString('phone (Invalid phone)', $error->getMessage());
+        }
+
+        // the display name and the deactivation were still sent
+        $this->assertSame(array('key' => 'displayname', 'value' => 'User Demo'), $this->requests[2]['body']);
+        $this->assertStringEndsWith('/users/demo/disable', $this->requests[3]['url']);
     }
 }

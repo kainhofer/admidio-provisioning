@@ -88,6 +88,23 @@ class HttpClient
     }
 
     /**
+     * The error of a request that got no response. A target that accepted the connection but did not
+     * answer in time is slow, not unreachable; both are temporary and retried.
+     *
+     * @param int $errno cURL error number
+     * @param bool $connected Whether the connection to the target had been established
+     * @param int $timeout The time limit of the whole request in seconds
+     */
+    public static function transportError(int $errno, bool $connected, int $timeout, string $error): ConnectorError
+    {
+        $suffix = $error === '' ? '.' : ': ' . $error;
+        if ($errno === CURLE_OPERATION_TIMEDOUT && $connected) {
+            return ConnectorError::retry('The target did not answer within ' . $timeout . ' seconds' . $suffix);
+        }
+        return ConnectorError::retry('The target could not be reached' . $suffix);
+    }
+
+    /**
      * @param array<int,string> $headers
      * @return array{0:int, 1:array<string,string>, 2:string}
      */
@@ -107,13 +124,13 @@ class HttpClient
         $responseBody = '';
         $tooLarge = false;
         $responseHeaders = array();
-        $isCli = PHP_SAPI === 'cli';
+        $timeout = PHP_SAPI === 'cli' ? 15 : 5;
 
         curl_setopt_array($curl, $pinning + array(
             CURLOPT_CUSTOMREQUEST => $method,
             CURLOPT_HTTPHEADER => $headers,
             CURLOPT_CONNECTTIMEOUT => 3,
-            CURLOPT_TIMEOUT => $isCli ? 15 : 5,
+            CURLOPT_TIMEOUT => $timeout,
             CURLOPT_FOLLOWLOCATION => false,
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
@@ -139,13 +156,15 @@ class HttpClient
 
         $result = curl_exec($curl);
         $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+        $connected = (float) curl_getinfo($curl, CURLINFO_CONNECT_TIME) > 0;
+        $errno = curl_errno($curl);
         $error = curl_error($curl);
 
         if ($tooLarge) {
             throw ConnectorError::invalid('The response of the target is larger than 1 MB.');
         }
         if ($result === false || $status === 0) {
-            throw ConnectorError::retry('The target could not be reached' . ($error === '' ? '.' : ': ' . $error));
+            throw self::transportError($errno, $connected, $timeout, $error);
         }
 
         return array($status, $responseHeaders, $responseBody);
