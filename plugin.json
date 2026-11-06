@@ -2,6 +2,7 @@
     "name": "PLG_PROVISIONING_NAME",
     "description": "PLG_PROVISIONING_DESCRIPTION",
     "version": "0.1.0",
+    "beta": 1,
     "author": "Reinhold Kainhofer",
     "url": "https://github.com/kainhofer/admidio-provisioning/",
     "icon": "bi-diagram-3",
