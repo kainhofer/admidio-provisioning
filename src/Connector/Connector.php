@@ -48,7 +48,9 @@ abstract class Connector
      * The fields of the connection section of the edit form, in the format of the plugin.json
      * settings: **type** (string, url, integer, boolean, enum), **label**, **description**,
      * **default**, **values** for enum, plus **required** and **secret**. A secret field is stored
-     * separately and never shown again.
+     * separately and never shown again. **showWhen** (optional, for example
+     * `array('auth_type' => array('basic'))`) shows the field only while another field of the connection
+     * has one of the listed values.
      *
      * @return array<string,array<string,mixed>>
      */

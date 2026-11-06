@@ -190,6 +190,7 @@ class TargetPresenter extends ProvisioningPresenter
         $config = $target->getConfig();
         $secrets = $target->getSecrets();
         $connectionFields = array();
+        $showWhen = array();
         foreach ($class::getConfigFields() as $field => $definition) {
             $id = 'cfg_' . $field;
             $label = $gL10n->get((string) ($definition['label'] ?? $field));
@@ -199,6 +200,9 @@ class TargetPresenter extends ProvisioningPresenter
             }
             $value = $config[$field] ?? ($definition['default'] ?? '');
             $type = (string) ($definition['type'] ?? 'string');
+            if (!empty($definition['showWhen'])) {
+                $showWhen[$id] = $definition['showWhen'];
+            }
 
             if (!empty($definition['secret'])) {
                 $options['type'] = 'password';
@@ -236,6 +240,10 @@ class TargetPresenter extends ProvisioningPresenter
                     $form->addInput($id, $label, (string) $value, $options);
                     $connectionFields[$id] = 'form.input.tpl';
             }
+        }
+
+        if ($showWhen !== array()) {
+            $this->addConnectionVisibility($showWhen);
         }
 
         // users
@@ -313,6 +321,34 @@ class TargetPresenter extends ProvisioningPresenter
         $this->assignSmartyVariable('lastUserEditedTimestamp', $target->getValue('pvt_timestamp_change'));
         $form->addToHtmlPage();
         $gCurrentSession->addFormObject($form);
+    }
+
+    /**
+     * Show a connection field only while the field it depends on has one of the listed values.
+     * The fields stay in the form, so their values survive switching back and forth.
+     *
+     * @param array<string,array<string,array<int,string>>> $showWhen Field id => (field name => values).
+     */
+    private function addConnectionVisibility(array $showWhen): void
+    {
+        $this->addJavascript('
+            var provisioningShowWhen = ' . json_encode($showWhen) . ';
+            function provisioningUpdateConnection() {
+                $.each(provisioningShowWhen, function (id, conditions) {
+                    var visible = true;
+                    $.each(conditions, function (name, values) {
+                        if ($.inArray($("#cfg_" + name).val(), values) === -1) {
+                            visible = false;
+                        }
+                    });
+                    $("#" + id + "_group").toggle(visible);
+                });
+            }
+            $(function () {
+                $("#adm_provisioning_target_edit_form select[id^=cfg_]").on("change", provisioningUpdateConnection);
+                provisioningUpdateConnection();
+            });
+        ', true);
     }
 
     /**
