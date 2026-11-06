@@ -64,6 +64,7 @@
   <string name="PLG_PROVISIONING_GROUPS">Groups</string>
   <string name="PLG_PROVISIONING_GROUPS_AND_SCHEDULE">Groups and verification</string>
   <string name="PLG_PROVISIONING_GROUPS_OF">Groups of #VAR1#</string>
+  <string name="PLG_PROVISIONING_INTRO">Admidio can push users, groups and role memberships to other systems, so that accounts are created and kept up to date, permissions are revoked and mailing lists stay current. Supported are the SCIM 2 standard, the Nextcloud OCS Provisioning API and the Mailman 3 REST API. Every change in Admidio is passed on automatically to all configured targets.</string>
   <string name="PLG_PROVISIONING_LAST_CLI_RUN">Last cron run</string>
   <string name="PLG_PROVISIONING_LAST_RECONCILIATION">Last reconciliation</string>
   <string name="PLG_PROVISIONING_LAST_RUN">Last run</string>

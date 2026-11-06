@@ -129,6 +129,7 @@ class TargetPresenter extends ProvisioningPresenter
             $gL10n->get('PLG_PROVISIONING_LAST_RUN'),
             ''
         ));
+        $this->assignSmartyVariable('intro', $gL10n->get('PLG_PROVISIONING_INTRO'));
         $this->assignSmartyVariable('rows', $rows);
         $this->assignSmartyVariable('messageNoData', $gL10n->get('PLG_PROVISIONING_NO_TARGETS'));
         $this->assignSmartyVariable('alert', $cronWarning ? $gL10n->get('PLG_PROVISIONING_NO_CRON_WARNING') : '');

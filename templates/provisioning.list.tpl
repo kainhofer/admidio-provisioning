@@ -1,3 +1,4 @@
+<p>{$intro}</p>
 {if $alert neq ''}
     <div class="alert alert-warning" role="alert">
         <i class="bi bi-exclamation-triangle-fill"></i> {$alert}
