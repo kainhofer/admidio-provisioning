@@ -62,6 +62,7 @@ class GroupPresenter extends ProvisioningPresenter
             $manual = $group['pvg_source'] === Group::SOURCE_MANUAL;
             if ($manual && $group['pvg_state'] === Group::STATE_ACTIVE) {
                 $actions[] = array(
+                    'id' => 'edit',
                     'url' => $this->pageUrl('groups.php', array('mode' => 'edit', 'target_uuid' => $targetUuid, 'uuid' => $uuid)),
                     'icon' => 'bi bi-pencil-square',
                     'tooltip' => $gL10n->get('SYS_EDIT')
@@ -105,6 +106,7 @@ class GroupPresenter extends ProvisioningPresenter
         $this->assignSmartyVariable('rows', $rows);
         $this->assignSmartyVariable('messageNoData', $gL10n->get('PLG_PROVISIONING_NO_GROUPS'));
         $this->assignSmartyVariable('alert', $alert);
+        $this->assignSmartyVariable('listId', 'provisioning-groups');
         $this->addHtmlByTemplate('provisioning.list.tpl');
     }
 

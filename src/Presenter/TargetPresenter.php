@@ -94,13 +94,14 @@ class TargetPresenter extends ProvisioningPresenter
                     self::formatTimestamp($state['pvs_last_run'] ?? null)
                 ),
                 'actions' => array(
-                    array('url' => $this->pageUrl('index.php', array('mode' => 'status', 'uuid' => $uuid)),
+                    array('id' => 'status', 'url' => $this->pageUrl('index.php', array('mode' => 'status', 'uuid' => $uuid)),
                         'icon' => 'bi bi-activity', 'tooltip' => $gL10n->get('PLG_PROVISIONING_STATUS')),
-                    array('url' => $this->pageUrl('index.php', array('mode' => 'edit', 'uuid' => $uuid)),
+                    array('id' => 'edit', 'url' => $this->pageUrl('index.php', array('mode' => 'edit', 'uuid' => $uuid)),
                         'icon' => 'bi bi-pencil-square', 'tooltip' => $gL10n->get('SYS_EDIT')),
-                    array('url' => $this->pageUrl('groups.php', array('target_uuid' => $uuid)),
+                    array('id' => 'groups', 'url' => $this->pageUrl('groups.php', array('target_uuid' => $uuid)),
                         'icon' => 'bi bi-people', 'tooltip' => $gL10n->get('PLG_PROVISIONING_GROUPS')),
                     array(
+                        'id' => 'deprovision',
                         'dataHref' => 'callUrlHideElement(\'' . $rowId . '\', \''
                             . $this->pageUrl('index.php', array('mode' => 'deprovision', 'uuid' => $uuid)) . '\', \''
                             . $gCurrentSession->getCsrfToken() . '\', \'provisioningReload\')',
@@ -135,6 +136,7 @@ class TargetPresenter extends ProvisioningPresenter
         $this->assignSmartyVariable('alert', $cronWarning ? $gL10n->get('PLG_PROVISIONING_NO_CRON_WARNING') : '');
         // a deprovisioned target stays in the list until its deletions are done
         $this->addJavascript('window.provisioningReload = function () { window.location.reload(); };');
+        $this->assignSmartyVariable('listId', 'provisioning-targets');
         $this->addHtmlByTemplate('provisioning.list.tpl');
     }
 

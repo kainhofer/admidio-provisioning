@@ -49,6 +49,7 @@ abstract class ProvisioningPresenter extends PagePresenter
         global $gL10n, $gCurrentSession;
 
         return array(
+            'id' => 'delete',
             'dataHref' => 'callUrlHideElement(\'' . $rowHtmlId . '\', \'' . $url . '\', \'' . $gCurrentSession->getCsrfToken() . '\')',
             'dataMessage' => $message,
             'icon' => 'bi bi-trash',
